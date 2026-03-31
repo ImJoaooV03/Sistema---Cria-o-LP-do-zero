@@ -145,147 +145,89 @@ export async function improvePrompt(prompt: string): Promise<string> {
 export async function generateDesignSystem(htmlContent: string): Promise<string> {
   const ai = getAI();
   
-  // ULTRA-AGGRESSIVE CLEANING to ensure it fits in the prompt
+  // Refined cleaning: Remove only the absolute "noise" to keep visual structure
   let cleanedHtml = htmlContent;
   
-  // 1. Remove all scripts and comments
-  cleanedHtml = cleanedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+  // 1. Remove comments and scripts
   cleanedHtml = cleanedHtml.replace(/<!--[\s\S]*?-->/g, "");
+  cleanedHtml = cleanedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
   
-  // 2. Remove all images (IA doesn't need the actual data, just the tags)
-  cleanedHtml = cleanedHtml.replace(/<img[^>]*>/gi, '<img src="[IMG]">');
+  // 2. Remove only VERY large base64 images (keep small ones/icons)
+  cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]{5000,}"/g, 'src="[LARGE_BASE64_REMOVED]"');
   
-  // 3. Remove all SVGs entirely
-  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '<svg>[SVG]</svg>');
-  
-  // 4. Remove base64 and large data attributes
-  cleanedHtml = cleanedHtml.replace(/src="data:[^"]+"/g, 'src="[DATA_REMOVED]"');
-  cleanedHtml = cleanedHtml.replace(/url\(['"]?data:[^'"]+['"]?\)/g, 'url([DATA_REMOVED])');
+  // 3. Remove only VERY large SVGs (> 10000 chars)
+  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, (match) => {
+    if (match.length > 10000) return '<svg>[LARGE_SVG_REMOVED]</svg>';
+    return match;
+  });
 
-  // 5. Truncate if still too large (safety limit)
-  if (cleanedHtml.length > 50000) {
-    cleanedHtml = cleanedHtml.substring(0, 50000) + "... [TRUNCATED]";
+  // 4. Increase limit to 120k for complex landing pages
+  if (cleanedHtml.length > 120000) {
+    cleanedHtml = cleanedHtml.substring(0, 120000) + "... [TRUNCATED]";
   }
 
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: `
-# Extract HTML Design System v2
+# World-Class Design System Architect
 
-You are a *Design System Showcase Builder*.
-You are given a reference website HTML:
+You are a *Senior Design Engineer* at a top-tier agency. 
+You are given the source code of a high-end website:
 
 ${cleanedHtml}
 
-Your task is to create *one new intermediate HTML file* that acts as a *living design system + pattern library* for this exact design.
+Your mission is to build a *Premium Design System Documentation* page that is **100% faithful** to the original.
 
 ---
 
-## GOAL
+## THE GOLDEN RULES
 
-Generate *one single file* called: design-system.html.
-This file must preserve the *exact look & behavior* of the reference design by *reusing the original HTML, CSS classes, animations, and layout patterns*.
-
----
-
-## HARD RULES (NON-NEGOTIABLE)
-
-1. Do *not redesign* or invent new styles.
-2. Reuse *exact class names, animations, timing, easing, hover/focus states*.
-3. **CRITICAL: You MUST include the Tailwind CSS CDN script in the <head>:**
-   <script src="https://cdn.tailwindcss.com"></script>
-4. **CRITICAL: You MUST include all <style> blocks found in the original HTML.**
-5. Reference the *same CSS/JS assets* used by the original, but replace local paths with public CDNs if applicable.
-6. The file must be *self-explanatory by structure* (sections = documentation).
-7. Include a *top horizontal nav* with anchor links to each section.
+1. **PIXEL-PERFECT CLONING**: Do NOT simplify. If a component has complex gradients, specific shadows, or custom fonts, you MUST use the exact original HTML and classes.
+2. **HERO REPLICATION**: The "Hero" section of the Design System MUST be a 1:1 clone of the site's main hero section, only changing the text to "Design System v2".
+3. **STYLE INTEGRITY**: You MUST include ALL <style> blocks from the original HTML.
+4. **SHOWCASE UI**: Use the provided "Showcase CSS" below to make the documentation look like a premium product.
 
 ---
 
-## SHOWCASE STYLES (REQUIRED)
+## SHOWCASE UI (MANDATORY CSS)
 
-You MUST include the following CSS in the <head> of your generated HTML to style the showcase itself.
+Include this in the <head> of your generated HTML:
 
 <style>
-/* Showcase UI */
-body { background: #f8fafc; color: #1e293b; margin: 0; font-family: 'Inter', sans-serif; }
-.ds-container { max-width: 1400px; margin: 0 auto; padding: 0 40px; }
-.ds-label { font-size:10px; letter-spacing:.18em; text-transform:uppercase; font-weight:600; color:#64748b; }
-.ds-token { font-family:monospace; font-size:11px; color:#94a3b8; }
-.ds-row { display:flex; align-items:center; gap:16px; padding:28px 32px; background:#fff; border-bottom:1px solid #e2e8f0; transition: background 0.2s; }
-.ds-row:hover { background:#f1f5f9; }
-.ds-row-name { width:160px; flex-shrink:0; font-weight: 500; font-size: 13px; }
-.ds-row-preview { flex:1; }
-.ds-row-spec { min-width:180px; text-align:right; font-family:monospace; font-size:11px; color:#94a3b8; }
-.swatch-inner { height:96px; width:100%; border-radius:4px; border: 1px solid rgba(0,0,0,0.05); }
-.ds-section-header { text-align:center; margin-bottom:64px; padding-top: 80px; }
-.ds-divider { width:64px; height:2px; background:#C4A470; margin: 16px auto; }
-nav.ds-nav { position: sticky; top: 0; z-index: 1000; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-bottom: 1px solid #e2e880; padding: 1.2rem; display: flex; justify-content: center; gap: 2.5rem; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; }
-nav.ds-nav a { color: #64748b; text-decoration: none; transition: color 0.2s; }
-nav.ds-nav a:hover { color: #C4A470; }
-section { scroll-margin-top: 100px; padding-bottom: 80px; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root { --ds-accent: #C4A470; --ds-bg: #f8fafc; --ds-card: #ffffff; --ds-text: #0f172a; }
+  body { background: var(--ds-bg); color: var(--ds-text); font-family: 'Inter', sans-serif; margin: 0; }
+  .ds-nav { position: sticky; top: 0; z-index: 1000; background: rgba(255,255,255,0.8); backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; padding: 1rem; display: flex; justify-content: center; gap: 2rem; }
+  .ds-nav a { color: #64748b; text-decoration: none; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; transition: 0.2s; }
+  .ds-nav a:hover { color: var(--ds-accent); }
+  .ds-container { max-width: 1200px; margin: 0 auto; padding: 80px 20px; }
+  .ds-section-title { font-size: 32px; font-weight: 800; text-align: center; margin-bottom: 12px; letter-spacing: -0.02em; }
+  .ds-section-desc { text-align: center; color: #64748b; margin-bottom: 48px; font-size: 16px; }
+  .ds-divider { width: 40px; height: 3px; background: var(--ds-accent); margin: 0 auto 60px; border-radius: 2px; }
+  .ds-card { background: var(--ds-card); border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 40px; }
+  .ds-card-header { padding: 20px 32px; border-bottom: 1px solid #f1f5f9; background: #fafafa; display: flex; justify-content: space-between; align-items: center; }
+  .ds-card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
+  .ds-card-body { padding: 48px; }
+  .ds-token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; }
+  .ds-swatch { height: 100px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); margin-bottom: 12px; }
+  .ds-swatch-name { font-size: 14px; font-weight: 600; }
+  .ds-swatch-hex { font-family: monospace; font-size: 12px; color: #94a3b8; }
+  section { scroll-margin-top: 80px; }
 </style>
 
 ---
 
 ## OBJECTIVE
 
-Build a *single page* composed of *canonical examples* of the design system, organized in sections.
+Build a single-page Pattern Library with these sections:
 
----
+1. **Hero**: 1:1 Clone of original hero (text adapted).
+2. **Typography**: A clean table showing all Heading levels and Body styles using original classes.
+3. **Color Palette**: Swatches of all colors found in the CSS variables.
+4. **UI Components**: Buttons, Cards, and Icons shown in their original state.
+5. **Motion**: A gallery showing elements with the original entrance animations.
 
-### 0) Hero (Exact Clone, Text Adapted)
-
-The *first section MUST be a direct clone of the original Hero*:
-• Same HTML structure, class names, layout, images, animations, and interactions.
-• Replace the hero text content to present the *Design System*.
-
----
-
-### 1) Typography
-
-Create a *Typography section* rendered as a *spec table / vertical list*.
-Each row MUST contain:
-• Style name (e.g. "Heading 1", "Bold M")
-• Live text preview using the *exact original HTML element and CSS classes*
-• Font size / line-height label aligned right (format: 40px / 48px)
-
----
-
-### 2) Colors & Surfaces
-
-• Backgrounds (page, section, card, glass/blur if exists)
-• Borders, dividers, overlays
-• Gradients (as swatches + usage context)
-
----
-
-### 3) UI Components
-
-• Buttons, inputs, cards, etc. (only those that exist)
-• Show states side-by-side: default / hover / active / focus / disabled
-
----
-
-### 4) Layout & Spacing
-
-• Containers, grids, columns, section paddings
-• Show 2–3 real layout patterns from the reference (hero layout, grid, split)
-
----
-
-### 5) Motion & Interaction
-
-Show all motion behaviors present:
-• Entrance animations, Hover lifts/glows, Button hover transitions.
-• Include a small *Motion Gallery* demonstrating each animation class.
-
----
-
-### 6) Icons
-
-If the reference uses icons, display the *same icon style/system* using the *same markup and classes*.
-
-Return ONLY the raw HTML code. Do not include any markdown formatting or backticks.
+Return ONLY the raw HTML code. No markdown, no backticks.
     `,
   });
 
