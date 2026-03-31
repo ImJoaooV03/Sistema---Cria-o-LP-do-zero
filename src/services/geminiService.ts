@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { GoogleGenAI, Type } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 
 export interface GeneratedPage {
   title: string;
@@ -21,8 +22,52 @@ function getAI() {
   return new GoogleGenAI({ apiKey: apiKey! });
 }
 
-export async function generatePage(prompt: string): Promise<string> {
+function getClaudeAI() {
+  const apiKey = 
+    (typeof process !== 'undefined' ? process.env.CLAUDE_API_KEY : undefined) || 
+    import.meta.env.VITE_CLAUDE_API_KEY;
+    
+  if (!apiKey) {
+    return null;
+  }
+  
+  return new Anthropic({
+    apiKey: apiKey,
+    dangerouslyAllowBrowser: true // Required for client-side usage in this environment
+  });
+}
+
+export async function generatePage(prompt: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
+  const claude = getClaudeAI();
   const ai = getAI();
+
+  if (modelType === 'claude' && claude) {
+    const response = await claude.messages.create({
+      model: "claude-3-7-sonnet-latest",
+      max_tokens: 8192,
+      system: "Você é um web designer e desenvolvedor frontend de elite, visionário e inovador, especialista em páginas para escritórios de advocacia (Law Firms) no mercado brasileiro. Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA. Use APENAS Tailwind CSS via CDN. Retorne APENAS o conteúdo HTML para o <body>. Sem tags <html>/<body>/<head>.",
+      messages: [{ role: "user", content: `Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA para: "${prompt}".
+      
+      DIRETRIZES CRÍTICAS DE DESIGN (Estética Premium + Inovação):
+      1. FUNDAÇÃO: Mantenha a essência Dark & Gold (fundos escuros como bg-navy-900 ou bg-slate-950, acentos em dourado text-gold-500).
+      2. INOVAÇÃO E CRIATIVIDADE: Use a estrutura clássica de advocacia como referência, mas INVENTE. Crie layouts assimétricos, elementos sobrepostos, grids criativos (como bento grids), glassmorphism avançado (bg-white/5 backdrop-blur-xl), e tipografia artística. Faça a página parecer uma obra de arte premiada (nível Awwwards), diferente do padrão engessado.
+      3. TIPOGRAFIA: Use 'Playfair Display' (font-serif) para títulos gigantes e impactantes. Brinque com tamanhos (text-6xl a text-8xl), itálicos e pesos para criar hierarquia visual. Use 'Inter' (font-sans) para textos.
+      4. HERO SECTION E CONVERSÃO: Crie um Hero section deslumbrante dividido (split layout). Lado ESQUERDO: Título de impacto, copy persuasiva e botões de CTA magnéticos (ex: 'Fale com um Especialista'). Lado DIREITO: Uma imagem imponente e profissional de um advogado ou do escritório (use a tag img com máscaras, bordas arredondadas ou recortes criativos). NÃO coloque formulário no hero, foque em botões que direcionam para o WhatsApp ou para uma seção de contato inferior. INCLUA SEMPRE um botão flutuante de WhatsApp no canto inferior direito. Faixas de "Trust" (Prova Social) abaixo do hero.
+      5. IMAGENS: Use 'https://picsum.photos/seed/{keyword}/1280/720' integradas de forma criativa (masks modernas, recortes, filtros grayscale elegantes que revelam a cor no hover).
+      
+      REQUISITOS TÉCNICOS:
+      - Use APENAS Tailwind CSS via CDN. As cores personalizadas 'navy-900', 'navy-800', 'gold-500', 'gold-600' já estão configuradas no ambiente.
+      - Inclua ícones usando a tag <i data-lucide="nome-do-icone"></i> (ex: <i data-lucide="scale"></i>).
+      - Retorne APENAS o conteúdo HTML para o <body>. Sem tags <html>/<body>/<head>.
+      - O texto deve ser em Português do Brasil (PT-BR) com copy persuasiva, focada em segurança, confiança e autoridade.
+      
+      Formato de saída: Apenas a string HTML.` }]
+    });
+    const content = response.content[0];
+    if (content.type === 'text') return content.text;
+    return "";
+  }
+
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: `Você é um web designer e desenvolvedor frontend de elite, visionário e inovador, especialista em páginas para escritórios de advocacia (Law Firms) no mercado brasileiro. Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA para: "${prompt}".
@@ -49,8 +94,32 @@ export async function generatePage(prompt: string): Promise<string> {
   return response.text || "";
 }
 
-export async function updatePage(currentHtml: string, instruction: string): Promise<string> {
+export async function updatePage(currentHtml: string, instruction: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
+  const claude = getClaudeAI();
   const ai = getAI();
+
+  if (modelType === 'claude' && claude) {
+    const response = await claude.messages.create({
+      model: "claude-3-7-sonnet-latest",
+      max_tokens: 8192,
+      system: "Você é um web designer de elite, visionário e inovador, focado no mercado de advocacia. Retorne APENAS o conteúdo HTML atualizado.",
+      messages: [{ role: "user", content: `Aqui está o HTML atual:
+      
+      \`\`\`html
+      ${currentHtml}
+      \`\`\`
+      
+      Refine esta página com base em: "${instruction}". 
+      
+      Mantenha a base da estética premium de advocacia (Dark & Gold, tipografia Serif), mas sinta-se livre para INOVAR e criar soluções visuais únicas, modernas e deslumbrantes. Faça o design se destacar como perfeito, diferente do padrão engessado, usando layouts criativos, sobreposições e glassmorphism. O texto deve ser persuasivo em PT-BR.
+      
+      Retorne APENAS o conteúdo HTML atualizado.` }]
+    });
+    const content = response.content[0];
+    if (content.type === 'text') return content.text;
+    return "";
+  }
+
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: `Você é um web designer de elite, visionário e inovador, focado no mercado de advocacia. Aqui está o HTML atual:
@@ -117,8 +186,34 @@ export async function generateImage(prompt: string): Promise<string> {
   throw new Error("No image generated");
 }
 
-export async function improvePrompt(prompt: string): Promise<string> {
+export async function improvePrompt(prompt: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
+  const claude = getClaudeAI();
   const ai = getAI();
+
+  if (modelType === 'claude' && claude) {
+    const response = await claude.messages.create({
+      model: "claude-3-7-sonnet-latest",
+      max_tokens: 4096,
+      system: "Você é um especialista em engenharia de prompt e web design visionário, focado no mercado de advocacia. Retorne APENAS o texto do prompt melhorado.",
+      messages: [{ role: "user", content: `Transforme o pedido simples abaixo em um prompt detalhado para gerar uma landing page premium, linda, perfeita e altamente inovadora para um escritório de advocacia.
+      
+      Pedido original: "${prompt}"
+      
+      O prompt melhorado deve enfatizar:
+      - Estética Dark & Gold como fundação, mas com liberdade criativa para inovar (layouts assimétricos, bento grids, sobreposições elegantes).
+      - Design de vanguarda, perfeito e deslumbrante (nível Awwwards), fugindo do padrão engessado.
+      - Tipografia Serif elegante e artística para títulos gigantes (Playfair Display).
+      - Hero section dividido: Texto persuasivo e CTAs à esquerda, e uma imagem imponente de advogado/escritório à direita (sem formulário no hero).
+      - Elementos de conversão (WhatsApp flutuante, Trust badges).
+      - Copywriting persuasivo em Português do Brasil (PT-BR) focado em segurança e sigilo.
+      
+      Retorne APENAS o texto do prompt melhorado.` }]
+    });
+    const content = response.content[0];
+    if (content.type === 'text') return content.text;
+    return prompt;
+  }
+
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: `Você é um especialista em engenharia de prompt e web design visionário, focado no mercado de advocacia. Transforme o pedido simples abaixo em um prompt detalhado para gerar uma landing page premium, linda, perfeita e altamente inovadora para um escritório de advocacia.
@@ -142,11 +237,12 @@ export async function improvePrompt(prompt: string): Promise<string> {
   return response.text || prompt;
 }
 
-export async function generateDesignSystem(htmlContent: string): Promise<string> {
+export async function generateDesignSystem(htmlContent: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
+  const claude = getClaudeAI();
   const ai = getAI();
   
   // Extract all <link> and <style> tags to preserve external CSS (Elementor, WP, etc.)
-  const styleMatches = htmlContent.match(/<link[^>]+rel=["']stylesheet["'][^>]*>|<style[^>]*>[\s\S]*?<\/style>/gi) || [];
+  const styleMatches = htmlContent.match(/<link[^>]+rel=["']stylesheet["'][^>]*>|<style[^>]*>[\s\S]*?<\/style>|<link[^>]+href=["'][^"']*fonts\.googleapis\.com[^"']*["'][^>]*>/gi) || [];
   const externalStyles = styleMatches.join('\n');
 
   // Refined cleaning: Keep visual structure but remove heavy scripts
@@ -167,9 +263,7 @@ export async function generateDesignSystem(htmlContent: string): Promise<string>
     cleanedHtml = cleanedHtml.substring(0, 150000) + "... [TRUNCATED]";
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
-    contents: `
+  const systemPrompt = `
 # World-Class Design System Architect
 
 You are a *Senior Design Engineer*. You are given the source code of a high-end website:
@@ -192,6 +286,7 @@ Build a *Premium Design System Documentation* page that is **100% faithful** to 
 2. **ASSET INTEGRITY**: Keep all original class names. The external CSS provided above depends on them.
 3. **ICON SUPPORT**: Include common icon CDNs (FontAwesome, Lucide) in the <head> just in case.
 4. **SHOWCASE UI**: Use the provided "Showcase CSS" below for the documentation wrapper.
+5. **PIXEL-PERFECT REPLICATION**: Every shadow, every border-radius, every font-size must be identical to the original.
 
 ---
 
@@ -220,6 +315,8 @@ Include this in the <head>:
 
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+<script src="https://unpkg.com/lucide@latest"></script>
 
 ---
 
@@ -232,7 +329,27 @@ Build a single-page with:
 4. **Components**: Buttons and Cards in their original state.
 
 Return ONLY the raw HTML code.
-    `,
+    `;
+
+  if (modelType === 'claude' && claude) {
+    const response = await claude.messages.create({
+      model: "claude-3-7-sonnet-latest",
+      max_tokens: 8192,
+      system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code.",
+      messages: [{ role: "user", content: systemPrompt }]
+    });
+    const content = response.content[0];
+    if (content.type === 'text') {
+      let html = content.text;
+      html = html.replace(/```html/gi, '').replace(/```/g, '').trim();
+      return html;
+    }
+    return "";
+  }
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-pro-preview",
+    contents: systemPrompt,
   });
 
   let html = response.text || "";

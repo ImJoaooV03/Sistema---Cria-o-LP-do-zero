@@ -144,7 +144,22 @@ function App() {
   const [savedDesignSystems, setSavedDesignSystems] = useState<SavedDesignSystem[]>([]);
   const [dsSearch, setDsSearch] = useState("");
   const [isCopied, setIsCopied] = useState(false);
+  const [isClaudeActive, setIsClaudeActive] = useState(false);
+  const [dsModel, setDsModel] = useState<'claude' | 'gemini'>('claude');
+  const [mainModel, setMainModel] = useState<'claude' | 'gemini'>('claude');
   const dsIframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const claudeKey = import.meta.env.VITE_CLAUDE_API_KEY;
+    if (claudeKey && claudeKey !== 'MY_CLAUDE_API_KEY') {
+      setIsClaudeActive(true);
+      setDsModel('claude');
+      setMainModel('claude');
+    } else {
+      setDsModel('gemini');
+      setMainModel('gemini');
+    }
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(dsGeneratedHtml);
@@ -270,11 +285,11 @@ function App() {
     if (!newClientName.trim() || !newPrompt.trim() || !user) return;
 
     setIsLoading(true);
-    setLoadingText("Gerando design inicial...");
+    setLoadingText(`Gerando design inicial com ${mainModel === 'claude' ? 'Claude 4.6' : 'Gemini 3.1 Pro'}...`);
     
     let generatedHtml = "";
     try {
-      generatedHtml = await generatePage(newPrompt);
+      generatedHtml = await generatePage(newPrompt, mainModel);
     } catch (error) {
       console.error("Gemini API Error:", error);
       showAlert("Erro", "Erro ao gerar projeto com a IA. Tente novamente.");
@@ -311,11 +326,11 @@ function App() {
     if (!activeProject || !refinePrompt.trim() || !user) return;
 
     setIsLoading(true);
-    setLoadingText("Aplicando alterações...");
+    setLoadingText(`Aplicando alterações com ${mainModel === 'claude' ? 'Claude 4.6' : 'Gemini 3.1 Pro'}...`);
     
     let updatedHtml = "";
     try {
-      updatedHtml = await updatePage(activeProject.html, refinePrompt);
+      updatedHtml = await updatePage(activeProject.html, refinePrompt, mainModel);
     } catch (error) {
       console.error("Gemini API Error:", error);
       showAlert("Erro", "Erro ao aplicar alterações com a IA. Tente novamente.");
@@ -348,7 +363,7 @@ function App() {
     setIsLoading(true);
     setLoadingText("Otimizando briefing...");
     try {
-      const improved = await improvePrompt(newPrompt);
+      const improved = await improvePrompt(newPrompt, mainModel);
       setNewPrompt(improved);
     } catch (error) {
       console.error(error);
@@ -362,7 +377,7 @@ function App() {
     setIsLoading(true);
     setLoadingText("Otimizando instrução...");
     try {
-      const improved = await improvePrompt(refinePrompt);
+      const improved = await improvePrompt(refinePrompt, mainModel);
       setRefinePrompt(improved);
     } catch (error) {
       console.error(error);
@@ -483,10 +498,10 @@ function App() {
     const input = typeof contentToUse === 'string' ? contentToUse : dsHtmlInput;
     if (!input.trim() || !user) return;
     setIsLoading(true);
-    setLoadingText("Extraindo Design System...");
+    setLoadingText(`Extraindo Design System com ${dsModel === 'claude' ? 'Claude 4.6' : 'Gemini 3.1 Pro'}...`);
     let generatedHtml = "";
     try {
-      generatedHtml = await generateDesignSystem(input);
+      generatedHtml = await generateDesignSystem(input, dsModel);
       setDsGeneratedHtml(generatedHtml);
       setDsViewMode('preview');
     } catch (error: any) {
@@ -915,6 +930,30 @@ const renderEditor = () => (
                 />
               </div>
 
+              <div className="mb-6">
+                <label className="block text-xs font-semibold text-white/70 uppercase tracking-widest mb-3">
+                  Modelo de IA
+                </label>
+                <div className="flex bg-white/5 rounded-lg p-1 border border-white/10">
+                  <button 
+                    type="button"
+                    onClick={() => isClaudeActive && setMainModel('claude')}
+                    disabled={!isClaudeActive}
+                    className={`flex-1 py-2 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${mainModel === 'claude' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' : 'text-white/40 hover:text-white'} ${!isClaudeActive ? 'opacity-20 cursor-not-allowed' : ''}`}
+                    title={!isClaudeActive ? "Claude API key not configured" : ""}
+                  >
+                    Claude 4.6
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setMainModel('gemini')}
+                    className={`flex-1 py-2 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${mainModel === 'gemini' ? 'bg-[#d4af37] text-[#0f172a] shadow-lg shadow-[#d4af37]/20' : 'text-white/40 hover:text-white'}`}
+                  >
+                    Gemini 3.1 Pro
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-semibold text-white/70 uppercase tracking-widest">
@@ -1029,6 +1068,30 @@ const renderEditor = () => (
               <div className="flex-1 flex flex-col p-6 overflow-y-auto">
                 
                 <div className="mb-6">
+                  <label className="block text-xs font-semibold text-white/70 uppercase tracking-widest mb-3">
+                    Modelo de IA
+                  </label>
+                  <div className="flex bg-white/5 rounded-lg p-1 border border-white/10">
+                    <button 
+                      type="button"
+                      onClick={() => isClaudeActive && setMainModel('claude')}
+                      disabled={!isClaudeActive}
+                      className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${mainModel === 'claude' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' : 'text-white/40 hover:text-white'} ${!isClaudeActive ? 'opacity-20 cursor-not-allowed' : ''}`}
+                      title={!isClaudeActive ? "Claude API key not configured" : ""}
+                    >
+                      Claude 4.6
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setMainModel('gemini')}
+                      className={`flex-1 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${mainModel === 'gemini' ? 'bg-[#d4af37] text-[#0f172a] shadow-lg shadow-[#d4af37]/20' : 'text-white/40 hover:text-white'}`}
+                    >
+                      Gemini 3.1 Pro
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-6">
                   <div className="flex items-center justify-between mb-3">
                     <label className="text-xs font-semibold text-white/70 uppercase tracking-widest">
                       Instruções de Alteração
@@ -1119,7 +1182,18 @@ const renderEditor = () => (
             </div>
             <div>
               <h2 className="font-medium text-sm">Design System Extractor</h2>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">Extraia padrões de qualquer HTML</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-[10px] text-white/40 uppercase tracking-widest">Extraia padrões de qualquer HTML</p>
+                {dsModel === 'claude' ? (
+                  <span className="text-[8px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/30 font-bold uppercase tracking-tighter">
+                    Claude 4.6 Active
+                  </span>
+                ) : (
+                  <span className="text-[8px] bg-[#d4af37]/20 text-[#d4af37] px-1.5 py-0.5 rounded border border-[#d4af37]/30 font-bold uppercase tracking-tighter">
+                    Gemini 3.1 Pro Active
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1198,16 +1272,39 @@ const renderEditor = () => (
                           : "Faça upload de um arquivo .html para extrairmos o Design System completo."}
                       </p>
                       {dsFileName && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGenerateDesignSystem();
-                          }}
-                          disabled={isLoading}
-                          className="px-6 py-2 bg-[#d4af37] text-[#0f172a] rounded-lg text-sm font-bold hover:bg-[#b4941f] transition-all flex items-center gap-2 z-20 relative"
-                        >
-                          <Sparkles className="w-4 h-4" /> Iniciar Extração
-                        </button>
+                        <div className="flex flex-col items-center gap-4 z-20 relative">
+      <div className="flex bg-white/5 rounded-lg p-1 border border-white/5">
+        <button 
+          onClick={(e) => { e.stopPropagation(); if(isClaudeActive) setDsModel('claude'); }}
+          disabled={!isClaudeActive}
+          className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${dsModel === 'claude' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' : 'text-white/40 hover:text-white'} ${!isClaudeActive ? 'opacity-20 cursor-not-allowed' : ''}`}
+          title={!isClaudeActive ? "Claude API key not configured" : ""}
+        >
+          Claude 4.6
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); setDsModel('gemini'); }}
+          className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${dsModel === 'gemini' ? 'bg-[#d4af37] text-[#0f172a] shadow-lg shadow-[#d4af37]/20' : 'text-white/40 hover:text-white'}`}
+        >
+          Gemini 3.1 Pro
+        </button>
+      </div>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGenerateDesignSystem();
+                            }}
+                            disabled={isLoading}
+                            className="px-8 py-3 bg-[#d4af37] text-[#0f172a] rounded-xl text-sm font-bold hover:bg-[#b4941f] transition-all flex items-center gap-2 shadow-xl shadow-[#d4af37]/10"
+                          >
+                            {isLoading ? (
+                              <div className="w-4 h-4 border-2 border-[#0f172a]/30 border-t-[#0f172a] rounded-full animate-spin" />
+                            ) : (
+                              <Sparkles className="w-4 h-4" />
+                            )}
+                            Iniciar Extração
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
