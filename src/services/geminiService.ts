@@ -43,7 +43,7 @@ export async function generatePage(prompt: string, modelType: 'claude' | 'gemini
 
   if (modelType === 'claude' && claude) {
     const response = await claude.messages.create({
-      model: "claude-3-7-sonnet-latest",
+      model: "claude-3-5-sonnet-latest",
       max_tokens: 8192,
       system: "Você é um web designer e desenvolvedor frontend de elite, visionário e inovador, especialista em páginas para escritórios de advocacia (Law Firms) no mercado brasileiro. Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA. Use APENAS Tailwind CSS via CDN. Retorne APENAS o conteúdo HTML para o <body>. Sem tags <html>/<body>/<head>.",
       messages: [{ role: "user", content: `Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA para: "${prompt}".
@@ -100,7 +100,7 @@ export async function updatePage(currentHtml: string, instruction: string, model
 
   if (modelType === 'claude' && claude) {
     const response = await claude.messages.create({
-      model: "claude-3-7-sonnet-latest",
+      model: "claude-3-5-sonnet-latest",
       max_tokens: 8192,
       system: "Você é um web designer de elite, visionário e inovador, focado no mercado de advocacia. Retorne APENAS o conteúdo HTML atualizado.",
       messages: [{ role: "user", content: `Aqui está o HTML atual:
@@ -192,7 +192,7 @@ export async function improvePrompt(prompt: string, modelType: 'claude' | 'gemin
 
   if (modelType === 'claude' && claude) {
     const response = await claude.messages.create({
-      model: "claude-3-7-sonnet-latest",
+      model: "claude-3-5-sonnet-latest",
       max_tokens: 4096,
       system: "Você é um especialista em engenharia de prompt e web design visionário, focado no mercado de advocacia. Retorne APENAS o texto do prompt melhorado.",
       messages: [{ role: "user", content: `Transforme o pedido simples abaixo em um prompt detalhado para gerar uma landing page premium, linda, perfeita e altamente inovadora para um escritório de advocacia.
@@ -338,7 +338,7 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
 
   if (modelType === 'claude' && claude) {
     const response = await claude.messages.create({
-      model: "claude-3-7-sonnet-latest",
+      model: "claude-3-5-sonnet-latest",
       max_tokens: 8192,
       system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code. No markdown.",
       messages: [{ role: "user", content: systemPrompt }]
