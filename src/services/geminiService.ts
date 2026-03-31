@@ -43,8 +43,7 @@ function getClaudeAI() {
 async function callClaude(claude: Anthropic, params: any) {
   // Model priority list based on user documentation and standard availability
   const models = [
-    "claude-opus-4-6",           // From user's provided documentation
-    "claude-3-7-sonnet-20250219",
+    "claude-3-7-sonnet-20250219", // Latest and greatest
     "claude-3-5-sonnet-20241022", 
     "claude-3-5-sonnet-20240620", 
     "claude-3-5-haiku-20241022",
@@ -62,9 +61,9 @@ async function callClaude(claude: Anthropic, params: any) {
       });
     } catch (error: any) {
       lastError = error;
-      // If it's a 404 (model not found), try the next one in the list
-      if (error.status === 404 || (error.message && error.message.includes('not_found_error'))) {
-        console.warn(`Model ${model} not found, trying fallback...`);
+      // If it's a 404 (model not found) or 400 (bad request/token limit), try the next one in the list
+      if (error.status === 404 || error.status === 400 || (error.message && (error.message.includes('not_found_error') || error.message.includes('token_limit')))) {
+        console.warn(`Model ${model} failed with ${error.status || 'error'}, trying fallback...`);
         continue;
       }
       // For other errors (auth, rate limit, etc.), throw immediately
@@ -293,8 +292,8 @@ export async function generateDesignSystem(htmlContent: string, modelType: 'clau
     return match;
   });
 
-  if (cleanedHtml.length > 200000) {
-    cleanedHtml = cleanedHtml.substring(0, 200000) + "... [TRUNCATED]";
+  if (cleanedHtml.length > 40000) {
+    cleanedHtml = cleanedHtml.substring(0, 40000) + "... [TRUNCATED]";
   }
 
   const systemPrompt = `
@@ -373,25 +372,51 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
   if (modelType === 'claude' && claude) {
     const response = await callClaude(claude, {
       max_tokens: 8192,
-      system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code. No markdown.",
+      system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code. No markdown. Ensure the output starts with <!DOCTYPE html> or <html>.",
       messages: [{ role: "user", content: systemPrompt }]
     });
-    const content = response.content[0];
-    if (content.type === 'text') {
-      let html = content.text;
+    
+    // Concatenate all text blocks (skipping thinking blocks)
+    let fullText = response.content
+      .filter((c: any) => c.type === 'text')
+      .map((c: any) => c.text)
+      .join('\n');
+    
+    if (fullText.trim()) {
+      let html = fullText;
       
-      // Extract content between ```html and ``` if present
+      // 1. Try to extract from markdown blocks
       const match = html.match(/```html([\s\S]*?)```/i) || html.match(/```([\s\S]*?)```/i);
       if (match) {
         html = match[1];
       } else {
-        // Fallback: remove markdown markers if they exist
-        html = html.replace(/```html/gi, '').replace(/```/g, '');
+        // 2. Try to find content between <html> or <!DOCTYPE and the end
+        const htmlStart = html.search(/<!DOCTYPE|<html>/i);
+        if (htmlStart !== -1) {
+          html = html.substring(htmlStart);
+          const htmlEnd = html.lastIndexOf('</html>');
+          if (htmlEnd !== -1) {
+            html = html.substring(0, htmlEnd + 7);
+          }
+        } else {
+          // Fallback: remove markdown markers if they exist
+          html = html.replace(/```html/gi, '').replace(/```/g, '');
+        }
       }
       
-      return html.trim();
+      const resultHtml = html.trim();
+      if (resultHtml.length > 100) {
+        // Ensure it's a full HTML document
+        if (!resultHtml.toLowerCase().includes('<html')) {
+          return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${resultHtml}</body></html>`;
+        }
+        return resultHtml;
+      }
     }
-    return "";
+    
+    // If Claude failed or returned empty, fallback to Gemini
+    console.warn("Claude returned empty or invalid HTML, falling back to Gemini...");
+    console.log("Claude raw response was:", fullText.substring(0, 500) + "...");
   }
 
   const response = await ai.models.generateContent({
@@ -411,9 +436,25 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
   if (match) {
     html = match[1];
   } else {
-    // Fallback: remove markdown markers if they exist
-    html = html.replace(/```html/gi, '').replace(/```/g, '');
+    // Try to find content between <html> or <!DOCTYPE and the end
+    const htmlStart = html.search(/<!DOCTYPE|<html>/i);
+    if (htmlStart !== -1) {
+      html = html.substring(htmlStart);
+      const htmlEnd = html.lastIndexOf('</html>');
+      if (htmlEnd !== -1) {
+        html = html.substring(0, htmlEnd + 7);
+      }
+    } else {
+      // Fallback: remove markdown markers if they exist
+      html = html.replace(/```html/gi, '').replace(/```/g, '');
+    }
   }
   
-  return html.trim();
+  const finalHtml = html.trim();
+  // Ensure it's a full HTML document
+  if (finalHtml.length > 100 && !finalHtml.toLowerCase().includes('<html')) {
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${finalHtml}</body></html>`;
+  }
+  
+  return finalHtml;
 }

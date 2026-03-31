@@ -497,10 +497,13 @@ function App() {
     const input = typeof contentToUse === 'string' ? contentToUse : dsHtmlInput;
     if (!input.trim() || !user) return;
     setIsLoading(true);
-    setLoadingText(`Extraindo Design System com ${dsModel === 'claude' ? 'Claude 4.6' : 'Gemini 3.1 Pro'}...`);
+    setLoadingText(`Extraindo Design System com ${dsModel === 'claude' ? 'Claude 3.7' : 'Gemini 3.1 Pro'}...`);
     let generatedHtml = "";
     try {
       generatedHtml = await generateDesignSystem(input, dsModel);
+      if (!generatedHtml || generatedHtml.length < 100) {
+        throw new Error("O conteúdo gerado é inválido ou muito curto.");
+      }
       setDsGeneratedHtml(generatedHtml);
       setDsViewMode('preview');
     } catch (error: any) {
@@ -1274,7 +1277,7 @@ const renderEditor = () => (
                               className={`px-6 py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${dsModel === 'claude' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-white/40 hover:text-white'} ${!isClaudeActive ? 'opacity-20 cursor-not-allowed' : ''}`}
                               title={!isClaudeActive ? "Claude API key not configured" : ""}
                             >
-                              <Sparkles className="w-3.5 h-3.5" /> Claude 4.6
+                              <Sparkles className="w-3.5 h-3.5" /> Claude 3.7
                             </button>
                             <button 
                               onClick={() => setDsModel('gemini')}
