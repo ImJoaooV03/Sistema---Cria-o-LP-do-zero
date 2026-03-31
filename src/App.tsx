@@ -1253,7 +1253,7 @@ const renderEditor = () => (
                 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   <div className="lg:col-span-2">
-                    <div className="w-full h-64 bg-[#0A0A0A] border-2 border-dashed border-white/10 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-all hover:border-[#d4af37]/50 relative group">
+                    <div className="w-full h-64 bg-[#0A0A0A] border-2 border-dashed border-white/10 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-all hover:border-[#d4af37]/50 relative group mb-6">
                       <input 
                         type="file" 
                         accept=".html" 
@@ -1266,47 +1266,49 @@ const renderEditor = () => (
                       <h4 className="text-lg font-medium text-white mb-2">
                         {dsFileName ? dsFileName : "Arraste ou clique para enviar"}
                       </h4>
-                      <p className="text-white/40 text-sm max-w-md mb-4">
+                      <p className="text-white/40 text-sm max-w-md">
                         {dsFileName 
-                          ? "Arquivo carregado. Clique no botão abaixo para iniciar a extração."
+                          ? "Arquivo carregado com sucesso."
                           : "Faça upload de um arquivo .html para extrairmos o Design System completo."}
                       </p>
-                      {dsFileName && (
-                        <div className="flex flex-col items-center gap-4 z-20 relative">
-      <div className="flex bg-white/5 rounded-lg p-1 border border-white/5">
-        <button 
-          onClick={(e) => { e.stopPropagation(); if(isClaudeActive) setDsModel('claude'); }}
-          disabled={!isClaudeActive}
-          className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${dsModel === 'claude' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' : 'text-white/40 hover:text-white'} ${!isClaudeActive ? 'opacity-20 cursor-not-allowed' : ''}`}
-          title={!isClaudeActive ? "Claude API key not configured" : ""}
-        >
-          Claude 4.6
-        </button>
-        <button 
-          onClick={(e) => { e.stopPropagation(); setDsModel('gemini'); }}
-          className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${dsModel === 'gemini' ? 'bg-[#d4af37] text-[#0f172a] shadow-lg shadow-[#d4af37]/20' : 'text-white/40 hover:text-white'}`}
-        >
-          Gemini 3.1 Pro
-        </button>
-      </div>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleGenerateDesignSystem();
-                            }}
-                            disabled={isLoading}
-                            className="px-8 py-3 bg-[#d4af37] text-[#0f172a] rounded-xl text-sm font-bold hover:bg-[#b4941f] transition-all flex items-center gap-2 shadow-xl shadow-[#d4af37]/10"
-                          >
-                            {isLoading ? (
-                              <div className="w-4 h-4 border-2 border-[#0f172a]/30 border-t-[#0f172a] rounded-full animate-spin" />
-                            ) : (
-                              <Sparkles className="w-4 h-4" />
-                            )}
-                            Iniciar Extração
-                          </button>
-                        </div>
-                      )}
                     </div>
+
+                    {dsFileName && (
+                      <div className="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="flex flex-col items-center gap-3">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Escolha o Motor de IA</span>
+                          <div className="flex bg-white/5 rounded-xl p-1.5 border border-white/10 shadow-2xl">
+                            <button 
+                              onClick={() => isClaudeActive && setDsModel('claude')}
+                              disabled={!isClaudeActive}
+                              className={`px-6 py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${dsModel === 'claude' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-white/40 hover:text-white'} ${!isClaudeActive ? 'opacity-20 cursor-not-allowed' : ''}`}
+                              title={!isClaudeActive ? "Claude API key not configured" : ""}
+                            >
+                              <Sparkles className="w-3.5 h-3.5" /> Claude 4.6
+                            </button>
+                            <button 
+                              onClick={() => setDsModel('gemini')}
+                              className={`px-6 py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${dsModel === 'gemini' ? 'bg-[#d4af37] text-[#0f172a] shadow-lg shadow-[#d4af37]/20' : 'text-white/40 hover:text-white'}`}
+                            >
+                              <Sparkles className="w-3.5 h-3.5" /> Gemini 3.1 Pro
+                            </button>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => handleGenerateDesignSystem()}
+                          disabled={isLoading}
+                          className="group relative px-12 py-4 bg-[#d4af37] text-[#0f172a] rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-[#b4941f] transition-all flex items-center gap-3 shadow-[0_20px_50px_rgba(212,175,55,0.2)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:scale-100"
+                        >
+                          {isLoading ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                          )}
+                          {isLoading ? "Processando..." : "Iniciar Extração Premium"}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-[#0A0A0A] border border-white/5 rounded-2xl p-6 flex flex-col justify-center">

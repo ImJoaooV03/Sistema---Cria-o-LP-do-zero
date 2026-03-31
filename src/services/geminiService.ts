@@ -245,48 +245,52 @@ export async function generateDesignSystem(htmlContent: string, modelType: 'clau
   const styleMatches = htmlContent.match(/<link[^>]+rel=["']stylesheet["'][^>]*>|<style[^>]*>[\s\S]*?<\/style>|<link[^>]+href=["'][^"']*fonts\.googleapis\.com[^"']*["'][^>]*>/gi) || [];
   const externalStyles = styleMatches.join('\n');
 
-  // Refined cleaning: Keep visual structure but remove heavy scripts
-  let cleanedHtml = htmlContent;
-  cleanedHtml = cleanedHtml.replace(/<!--[\s\S]*?-->/g, "");
-  cleanedHtml = cleanedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-  
+  // Pre-cleaning: Remove scripts, noscripts, and comments to reduce noise for AI
+  let cleanedHtml = htmlContent.replace(/<script[\s\S]*?<\/script>/gi, '')
+                        .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+                        .replace(/<!--[\s\S]*?-->/g, '');
+
   // Remove only VERY large base64 images
   cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]{10000,}"/g, 'src="[LARGE_BASE64_REMOVED]"');
   
   // Remove only VERY large SVGs
-  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, (match) => {
+  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>([\s\S]*?)<\/svg>/gi, (match) => {
     if (match.length > 15000) return '<svg>[LARGE_SVG_REMOVED]</svg>';
     return match;
   });
 
-  if (cleanedHtml.length > 150000) {
-    cleanedHtml = cleanedHtml.substring(0, 150000) + "... [TRUNCATED]";
+  if (cleanedHtml.length > 200000) {
+    cleanedHtml = cleanedHtml.substring(0, 200000) + "... [TRUNCATED]";
   }
 
   const systemPrompt = `
 # World-Class Design System Architect
 
-You are a *Senior Design Engineer*. You are given the source code of a high-end website:
+You are a *Senior Design Engineer* and *CSS Specialist*. You are given the source code of a high-end website:
 
 ${cleanedHtml}
 
 ---
 
 ## THE ASSETS (MANDATORY)
-You MUST include these original styles in the <head> to ensure the design isn't broken:
+You MUST include these original styles in the <head> to ensure the design isn't broken. DO NOT MODIFY THEM:
 ${externalStyles}
 
 ---
 
 ## THE MISSION
-Build a *Premium Design System Documentation* page that is **100% faithful** to the original.
+Build a *Premium Design System Documentation* page that is **100% faithful** to the original. 
+This is NOT a summary. This is a RECONSTRUCTION of the core visual identity.
 
-## THE GOLDEN RULES
-1. **NO SIMPLIFICATION**: If the Hero section uses complex Elementor/WP structures, CLONE THEM EXACTLY. Do not replace them with simple Tailwind divs.
+## THE GOLDEN RULES (STRICT ADHERENCE)
+1. **NO SIMPLIFICATION**: If the Hero section uses complex structures (Elementor, WP, custom grids), CLONE THEM EXACTLY. Do not replace them with simple Tailwind divs.
 2. **ASSET INTEGRITY**: Keep all original class names. The external CSS provided above depends on them.
-3. **ICON SUPPORT**: Include common icon CDNs (FontAwesome, Lucide) in the <head> just in case.
+3. **ICON SUPPORT**: Include common icon CDNs (FontAwesome, Lucide) in the <head>.
 4. **SHOWCASE UI**: Use the provided "Showcase CSS" below for the documentation wrapper.
 5. **PIXEL-PERFECT REPLICATION**: Every shadow, every border-radius, every font-size must be identical to the original.
+6. **NO HALLUCINATIONS**: Do not invent new colors or styles. Use only what is in the provided HTML.
+7. **IFRAME SAFETY**: If the original uses scripts that might break the preview, wrap the components in a safe way, but keep the HTML/CSS structure.
+8. **INTERACTIVITY & ANIMATIONS**: Prioritize the extraction of interactive elements (hover effects, transitions, active states) and CSS animations. Ensure these are showcased in a dedicated section and function exactly as they do in the source.
 
 ---
 
@@ -308,7 +312,7 @@ Include this in the <head>:
   .ds-card { background: var(--ds-card); border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 40px; }
   .ds-card-header { padding: 16px 24px; border-bottom: 1px solid #f1f5f9; background: #fafafa; }
   .ds-card-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
-  .ds-card-body { padding: 0; } /* Zero padding for 1:1 components */
+  .ds-card-body { padding: 0; }
   .ds-preview-box { padding: 40px; background: white; }
   section { scroll-margin-top: 80px; }
 </style>
@@ -323,19 +327,20 @@ Include this in the <head>:
 ## OUTPUT STRUCTURE
 
 Build a single-page with:
-1. **Hero Preview**: A 1:1 clone of the original site's hero.
+1. **Hero Preview**: A 1:1 clone of the original site's hero. This MUST be the first section.
 2. **Typography**: Table showing Heading levels using original classes.
-3. **Colors**: Swatches from CSS variables.
+3. **Colors**: Swatches from CSS variables found in the code.
 4. **Components**: Buttons and Cards in their original state.
+5. **Interactive Elements & Animations**: A gallery showcasing buttons, links, and other elements with their hover/active states, plus any notable CSS animations found in the source.
 
-Return ONLY the raw HTML code.
+Return ONLY the raw HTML code. Do not include markdown blocks or any text outside the <html> tags.
     `;
 
   if (modelType === 'claude' && claude) {
     const response = await claude.messages.create({
       model: "claude-3-7-sonnet-latest",
       max_tokens: 8192,
-      system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code.",
+      system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code. No markdown.",
       messages: [{ role: "user", content: systemPrompt }]
     });
     const content = response.content[0];
@@ -350,6 +355,10 @@ Return ONLY the raw HTML code.
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: systemPrompt,
+    config: {
+      systemInstruction: "You are a World-Class Design System Architect and CSS Expert. Your task is to build a Premium Design System Documentation page that is 100% faithful to the provided HTML. You MUST replicate the original design exactly, including all complex structures and external assets. Return ONLY the raw HTML code. NO MARKDOWN.",
+      temperature: 0.1, // Even lower for maximum fidelity
+    }
   });
 
   let html = response.text || "";
