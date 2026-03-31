@@ -33,17 +33,24 @@ function getClaudeAI() {
   
   return new Anthropic({
     apiKey: apiKey,
-    dangerouslyAllowBrowser: true // Required for client-side usage in this environment
+    dangerouslyAllowBrowser: true, // Required for client-side usage in this environment
+    defaultHeaders: {
+      'anthropic-version': '2023-06-01'
+    }
   });
 }
 
 async function callClaude(claude: Anthropic, params: any) {
-  // Model priority list: 3.7 Sonnet -> 3.5 Sonnet v2 -> 3.5 Sonnet v1 -> Opus
+  // Model priority list based on user documentation and standard availability
   const models = [
+    "claude-opus-4-6",           // From user's provided documentation
     "claude-3-7-sonnet-20250219",
     "claude-3-5-sonnet-20241022", 
     "claude-3-5-sonnet-20240620", 
-    "claude-3-opus-20240229"
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307"
   ];
   let lastError = null;
 
