@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "A generated landing page project.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who owns this project." },
+        "clientName": { "type": "string", "description": "Name of the client or law firm." },
+        "prompt": { "type": "string", "description": "The initial prompt used to generate the page." },
+        "html": { "type": "string", "description": "The current HTML content of the page." },
+        "history": { "type": "array", "items": { "type": "string" }, "description": "History of HTML versions." },
+        "historyIndex": { "type": "number", "description": "Current index in the history array." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the project was created." }
+      },
+      "required": ["userId", "clientName", "prompt", "html", "history", "historyIndex", "createdAt"]
+    },
+    "DesignSystem": {
+      "title": "DesignSystem",
+      "description": "A saved design system extracted from HTML.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who owns this design system." },
+        "name": { "type": "string", "description": "Name of the design system." },
+        "html": { "type": "string", "description": "The HTML content of the design system." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the design system was saved." }
+      },
+      "required": ["userId", "name", "html", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Stores generated projects."
+    },
+    "/designSystems/{designSystemId}": {
+      "schema": { "$ref": "#/entities/DesignSystem" },
+      "description": "Stores extracted design systems."
+    }
+  }
+}

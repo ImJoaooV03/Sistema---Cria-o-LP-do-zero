@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: projects
+    // Document ID: Auto-generated
+    // Fields:
+    //   - userId: string (required, immutable) - The UID of the user who owns this project
+    //   - clientName: string (required) - Name of the client or law firm
+    //   - prompt: string (required) - The initial prompt used to generate the page
+    //   - html: string (required) - The current HTML content of the page
+    //   - history: list of strings (required) - History of HTML versions
+    //   - historyIndex: number (required) - Current index in the history array
+    //   - createdAt: timestamp (required, immutable) - When the project was created
+    //
+    // Collection: designSystems
+    // Document ID: Auto-generated
+    // Fields:
+    //   - userId: string (required, immutable) - The UID of the user who owns this design system
+    //   - name: string (required) - Name of the design system
+    //   - html: string (required) - The HTML content of the design system
+    //   - createdAt: timestamp (required, immutable) - When the design system was saved
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "joaovicrengel@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidProject(data) {
+      return hasOnlyAllowedFields(['userId', 'clientName', 'prompt', 'html', 'history', 'historyIndex', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() < 200 &&
+             data.prompt is string && data.prompt.size() > 0 && data.prompt.size() < 10000 &&
+             data.html is string && data.html.size() < 1000000 &&
+             data.history is list && data.history.size() < 100 &&
+             data.historyIndex is number && data.historyIndex >= 0 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidDesignSystem(data) {
+      return hasOnlyAllowedFields(['userId', 'name', 'html', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.html is string && data.html.size() < 1000000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /projects/{projectId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && 
+                    isValidProject(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if (isDocOwner() || isAdmin()) && 
+                    isValidProject(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /designSystems/{designSystemId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && 
+                    isValidDesignSystem(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if (isDocOwner() || isAdmin()) && 
+                    isValidDesignSystem(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+  }
+}

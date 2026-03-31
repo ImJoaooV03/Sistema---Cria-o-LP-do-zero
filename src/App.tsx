@@ -1,15 +1,71 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { generatePage, updatePage, improvePrompt, generateDesignSystem } from './services/geminiService';
+import { auth, db, googleProvider } from './firebase';
+import { signInWithPopup, onAuthStateChanged, User, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp, getDocFromServer } from 'firebase/firestore';
 import { 
   Layout, Plus, Sparkles, Download, Undo, Redo, 
   PanelRightClose, PanelRightOpen, X, Wand2, Send, 
   Loader2, Scale, Code, Monitor, Briefcase, ChevronRight,
   Trash2, Home, Users, BarChart3, Settings, FileText, ArrowLeft,
-  Palette, FileCode2, Upload
+  Palette, FileCode2, Upload, LogOut
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart
 } from 'recharts';
+
+import { LoginScreen } from './components/LoginScreen';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 interface Project {
   id: string;
@@ -19,6 +75,7 @@ interface Project {
   history: string[];
   historyIndex: number;
   createdAt: Date;
+  userId?: string;
 }
 
 interface SavedDesignSystem {
@@ -26,11 +83,16 @@ interface SavedDesignSystem {
   name: string;
   html: string;
   createdAt: Date;
+  userId?: string;
 }
 
 type ViewMode = 'dashboard' | 'projects' | 'clients' | 'editor' | 'design-system';
 
 function App() {
+  // Auth State
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
   // Navigation State
   const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
 
@@ -69,36 +131,87 @@ function App() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  // Persistence
+  // Auth & Persistence
   useEffect(() => {
-    const savedProjects = localStorage.getItem('aura_law_projects');
-    if (savedProjects) {
+    async function testConnection() {
       try {
-        const parsed = JSON.parse(savedProjects);
-        setProjects(parsed.map((p: any) => ({ ...p, createdAt: new Date(p.createdAt) })));
-      } catch (e) {
-        console.error("Error loading projects", e);
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+        }
       }
     }
+    testConnection();
 
-    const savedDS = localStorage.getItem('aura_law_design_systems');
-    if (savedDS) {
-      try {
-        const parsed = JSON.parse(savedDS);
-        setSavedDesignSystems(parsed.map((ds: any) => ({ ...ds, createdAt: new Date(ds.createdAt) })));
-      } catch (e) {
-        console.error("Error loading design systems", e);
-      }
-    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('aura_law_projects', JSON.stringify(projects));
-  }, [projects]);
+    if (!isAuthReady || !user) {
+      setProjects([]);
+      setSavedDesignSystems([]);
+      return;
+    }
 
-  useEffect(() => {
-    localStorage.setItem('aura_law_design_systems', JSON.stringify(savedDesignSystems));
-  }, [savedDesignSystems]);
+    const isAdmin = user.email === 'joaovicrengel@gmail.com' && user.emailVerified;
+
+    const qProjects = isAdmin 
+      ? query(collection(db, 'projects'))
+      : query(collection(db, 'projects'), where('userId', '==', user.uid));
+      
+    const unsubProjects = onSnapshot(qProjects, (snapshot) => {
+      const projs: Project[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        projs.push({
+          id: docSnap.id,
+          clientName: data.clientName,
+          prompt: data.prompt,
+          html: data.html,
+          history: data.history,
+          historyIndex: data.historyIndex,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          userId: data.userId
+        });
+      });
+      projs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      setProjects(projs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'projects');
+    });
+
+    const qDS = isAdmin
+      ? query(collection(db, 'designSystems'))
+      : query(collection(db, 'designSystems'), where('userId', '==', user.uid));
+      
+    const unsubDS = onSnapshot(qDS, (snapshot) => {
+      const dsList: SavedDesignSystem[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        dsList.push({
+          id: docSnap.id,
+          name: data.name,
+          html: data.html,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          userId: data.userId
+        });
+      });
+      dsList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      setSavedDesignSystems(dsList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'designSystems');
+    });
+
+    return () => {
+      unsubProjects();
+      unsubDS();
+    };
+  }, [user, isAuthReady]);
 
   const activeProject = projects.find(p => p.id === activeProjectId);
 
@@ -131,30 +244,31 @@ function App() {
   // Handlers
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClientName.trim() || !newPrompt.trim()) return;
+    if (!newClientName.trim() || !newPrompt.trim() || !user) return;
 
     setIsLoading(true);
     setLoadingText("Gerando design inicial...");
     try {
       const generatedHtml = await generatePage(newPrompt);
       
-      const newProject: Project = {
-        id: Date.now().toString(),
+      const newProjectRef = doc(collection(db, 'projects'));
+      const newProject = {
+        userId: user.uid,
         clientName: newClientName,
         prompt: newPrompt,
         html: generatedHtml,
         history: [generatedHtml],
         historyIndex: 0,
-        createdAt: new Date()
+        createdAt: serverTimestamp()
       };
 
-      setProjects([newProject, ...projects]);
-      setActiveProjectId(newProject.id);
+      await setDoc(newProjectRef, newProject);
+      setActiveProjectId(newProjectRef.id);
       setIsCreating(false);
       setNewClientName("");
       setNewPrompt("");
     } catch (error) {
-      console.error(error);
+      handleFirestoreError(error, OperationType.CREATE, 'projects');
       alert("Erro ao gerar projeto. Tente novamente.");
     } finally {
       setIsLoading(false);
@@ -162,7 +276,7 @@ function App() {
   };
 
   const handleRefine = async () => {
-    if (!activeProject || !refinePrompt.trim()) return;
+    if (!activeProject || !refinePrompt.trim() || !user) return;
 
     setIsLoading(true);
     setLoadingText("Aplicando alterações...");
@@ -172,17 +286,16 @@ function App() {
       const newHistory = activeProject.history.slice(0, activeProject.historyIndex + 1);
       newHistory.push(updatedHtml);
 
-      const updatedProject = {
-        ...activeProject,
+      const updatedProjectRef = doc(db, 'projects', activeProject.id);
+      await updateDoc(updatedProjectRef, {
         html: updatedHtml,
         history: newHistory,
         historyIndex: newHistory.length - 1
-      };
+      });
 
-      setProjects(projects.map(p => p.id === activeProject.id ? updatedProject : p));
       setRefinePrompt("");
     } catch (error) {
-      console.error(error);
+      handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProject.id}`);
       alert("Erro ao refinar design.");
     } finally {
       setIsLoading(false);
@@ -217,36 +330,45 @@ function App() {
     }
   };
 
-  const undo = () => {
-    if (!activeProject || activeProject.historyIndex <= 0) return;
+  const undo = async () => {
+    if (!activeProject || activeProject.historyIndex <= 0 || !user) return;
     const newIndex = activeProject.historyIndex - 1;
-    const updatedProject = {
-      ...activeProject,
-      html: activeProject.history[newIndex],
-      historyIndex: newIndex
-    };
-    setProjects(projects.map(p => p.id === activeProject.id ? updatedProject : p));
+    try {
+      const updatedProjectRef = doc(db, 'projects', activeProject.id);
+      await updateDoc(updatedProjectRef, {
+        html: activeProject.history[newIndex],
+        historyIndex: newIndex
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProject.id}`);
+    }
   };
 
-  const redo = () => {
-    if (!activeProject || activeProject.historyIndex >= activeProject.history.length - 1) return;
+  const redo = async () => {
+    if (!activeProject || activeProject.historyIndex >= activeProject.history.length - 1 || !user) return;
     const newIndex = activeProject.historyIndex + 1;
-    const updatedProject = {
-      ...activeProject,
-      html: activeProject.history[newIndex],
-      historyIndex: newIndex
-    };
-    setProjects(projects.map(p => p.id === activeProject.id ? updatedProject : p));
+    try {
+      const updatedProjectRef = doc(db, 'projects', activeProject.id);
+      await updateDoc(updatedProjectRef, {
+        html: activeProject.history[newIndex],
+        historyIndex: newIndex
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProject.id}`);
+    }
   };
 
-  const deleteProject = (id: string, e: React.MouseEvent) => {
+  const deleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm("Tem certeza que deseja excluir este projeto?")) {
-      const newProjects = projects.filter(p => p.id !== id);
-      setProjects(newProjects);
-      if (activeProjectId === id) {
-        setActiveProjectId(null);
-        setCurrentView('projects');
+      try {
+        await deleteDoc(doc(db, 'projects', id));
+        if (activeProjectId === id) {
+          setActiveProjectId(null);
+          setCurrentView('projects');
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
       }
     }
   };
@@ -315,34 +437,38 @@ function App() {
 
   const handleGenerateDesignSystem = async (contentToUse?: string) => {
     const input = typeof contentToUse === 'string' ? contentToUse : dsHtmlInput;
-    if (!input.trim()) return;
+    if (!input.trim() || !user) return;
     setIsLoading(true);
     setLoadingText("Extraindo Design System...");
     try {
       const generated = await generateDesignSystem(input);
       setDsGeneratedHtml(generated);
       
-      // Save to history
-      const newDS: SavedDesignSystem = {
-        id: Date.now().toString(),
+      const newDSRef = doc(collection(db, 'designSystems'));
+      const newDS = {
+        userId: user.uid,
         name: dsFileName || `Design System ${savedDesignSystems.length + 1}`,
         html: generated,
-        createdAt: new Date()
+        createdAt: serverTimestamp()
       };
-      setSavedDesignSystems(prev => [newDS, ...prev]);
+      await setDoc(newDSRef, newDS);
       
       setDsViewMode('preview');
     } catch (error) {
-      console.error(error);
+      handleFirestoreError(error, OperationType.CREATE, 'designSystems');
       alert("Erro ao gerar Design System.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const deleteDesignSystem = (id: string, e: React.MouseEvent) => {
+  const deleteDesignSystem = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSavedDesignSystems(prev => prev.filter(ds => ds.id !== id));
+    try {
+      await deleteDoc(doc(db, 'designSystems', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `designSystems/${id}`);
+    }
   };
 
   const loadDesignSystem = (ds: SavedDesignSystem) => {
@@ -1122,6 +1248,18 @@ const renderEditor = () => (
     );
   };
 
+  if (!isAuthReady) {
+    return (
+      <div className="flex h-screen bg-[#050505] text-white font-sans items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#d4af37] animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
   return (
     <div className="flex h-screen bg-[#050505] text-white font-sans overflow-hidden">
       
@@ -1177,8 +1315,24 @@ const renderEditor = () => (
         </nav>
 
         <div className="p-4 border-t border-white/5">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-white/40 hover:bg-white/5 hover:text-white transition-all">
-            <Settings className="w-4 h-4" /> Configurações
+          <div className="flex items-center gap-3 px-4 py-3 mb-2">
+            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
+              {user.photoURL ? (
+                <img src={user.photoURL} alt={user.displayName || "User"} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <Users className="w-4 h-4 text-white/50" />
+              )}
+            </div>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-xs font-medium truncate">{user.displayName || "Usuário"}</span>
+              <span className="text-[10px] text-white/40 truncate">{user.email}</span>
+            </div>
+          </div>
+          <button 
+            onClick={() => signOut(auth)}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-400 hover:bg-red-400/10 transition-all"
+          >
+            <LogOut className="w-4 h-4" /> Sair
           </button>
         </div>
       </aside>
