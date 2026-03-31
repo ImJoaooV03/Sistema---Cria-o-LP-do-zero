@@ -489,13 +489,20 @@ function App() {
       generatedHtml = await generateDesignSystem(input);
       setDsGeneratedHtml(generatedHtml);
       setDsViewMode('preview');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Gemini API Error:", error);
       const isVercel = window.location.hostname.includes('vercel.app');
+      
+      // Extract detailed error message
+      let detailedError = "";
+      if (error?.message) detailedError = error.message;
+      if (error?.response?.data?.error?.message) detailedError = error.response.data.error.message;
+
       const errorMsg = isVercel 
-        ? "Erro ao extrair o Design System. Verifique se a variável VITE_GEMINI_API_KEY está configurada na Vercel ou se o arquivo é muito grande."
-        : "Erro ao extrair o Design System. Verifique se o arquivo não é muito grande ou tente novamente.";
-      showAlert("Erro", errorMsg);
+        ? `Erro na Vercel: ${detailedError || "Verifique a VITE_GEMINI_API_KEY ou o tamanho do arquivo."}`
+        : `Erro na Extração: ${detailedError || "O arquivo pode ser muito grande."}`;
+      
+      showAlert("Falha na Extração", errorMsg);
       setIsLoading(false);
       return;
     }

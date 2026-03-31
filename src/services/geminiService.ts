@@ -145,20 +145,27 @@ export async function improvePrompt(prompt: string): Promise<string> {
 export async function generateDesignSystem(htmlContent: string): Promise<string> {
   const ai = getAI();
   
-  // Clean up HTML to reduce token usage and prevent payload too large errors
+  // ULTRA-AGGRESSIVE CLEANING to ensure it fits in the prompt
   let cleanedHtml = htmlContent;
   
-  // Remove base64 images
-  cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]+"/g, 'src="[BASE64_IMAGE_REMOVED]"');
-  cleanedHtml = cleanedHtml.replace(/url\(['"]?data:image\/[^;]+;base64,[^'"]+['"]?\)/g, 'url([BASE64_IMAGE_REMOVED])');
+  // 1. Remove all scripts and comments
+  cleanedHtml = cleanedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+  cleanedHtml = cleanedHtml.replace(/<!--[\s\S]*?-->/g, "");
   
-  // Remove very large SVGs
-  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, (match) => {
-    if (match.length > 2000) {
-      return '<svg>[COMPLEX_SVG_REMOVED]</svg>';
-    }
-    return match;
-  });
+  // 2. Remove all images (IA doesn't need the actual data, just the tags)
+  cleanedHtml = cleanedHtml.replace(/<img[^>]*>/gi, '<img src="[IMG]">');
+  
+  // 3. Remove all SVGs entirely
+  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '<svg>[SVG]</svg>');
+  
+  // 4. Remove base64 and large data attributes
+  cleanedHtml = cleanedHtml.replace(/src="data:[^"]+"/g, 'src="[DATA_REMOVED]"');
+  cleanedHtml = cleanedHtml.replace(/url\(['"]?data:[^'"]+['"]?\)/g, 'url([DATA_REMOVED])');
+
+  // 5. Truncate if still too large (safety limit)
+  if (cleanedHtml.length > 50000) {
+    cleanedHtml = cleanedHtml.substring(0, 50000) + "... [TRUNCATED]";
+  }
 
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
