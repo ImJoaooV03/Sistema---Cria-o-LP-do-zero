@@ -37,13 +37,42 @@ function getClaudeAI() {
   });
 }
 
+async function callClaude(claude: Anthropic, params: any) {
+  // Model priority list: 3.7 Sonnet -> 3.5 Sonnet v2 -> 3.5 Sonnet v1 -> Opus
+  const models = [
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-20241022", 
+    "claude-3-5-sonnet-20240620", 
+    "claude-3-opus-20240229"
+  ];
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      return await claude.messages.create({
+        ...params,
+        model: model
+      });
+    } catch (error: any) {
+      lastError = error;
+      // If it's a 404 (model not found), try the next one in the list
+      if (error.status === 404 || (error.message && error.message.includes('not_found_error'))) {
+        console.warn(`Model ${model} not found, trying fallback...`);
+        continue;
+      }
+      // For other errors (auth, rate limit, etc.), throw immediately
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 export async function generatePage(prompt: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
   const claude = getClaudeAI();
   const ai = getAI();
 
   if (modelType === 'claude' && claude) {
-    const response = await claude.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+    const response = await callClaude(claude, {
       max_tokens: 8192,
       system: "Você é um web designer e desenvolvedor frontend de elite, visionário e inovador, especialista em páginas para escritórios de advocacia (Law Firms) no mercado brasileiro. Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA. Use APENAS Tailwind CSS via CDN. Retorne APENAS o conteúdo HTML para o <body>. Sem tags <html>/<body>/<head>.",
       messages: [{ role: "user", content: `Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA para: "${prompt}".
@@ -99,8 +128,7 @@ export async function updatePage(currentHtml: string, instruction: string, model
   const ai = getAI();
 
   if (modelType === 'claude' && claude) {
-    const response = await claude.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+    const response = await callClaude(claude, {
       max_tokens: 8192,
       system: "Você é um web designer de elite, visionário e inovador, focado no mercado de advocacia. Retorne APENAS o conteúdo HTML atualizado.",
       messages: [{ role: "user", content: `Aqui está o HTML atual:
@@ -191,8 +219,7 @@ export async function improvePrompt(prompt: string, modelType: 'claude' | 'gemin
   const ai = getAI();
 
   if (modelType === 'claude' && claude) {
-    const response = await claude.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+    const response = await callClaude(claude, {
       max_tokens: 4096,
       system: "Você é um especialista em engenharia de prompt e web design visionário, focado no mercado de advocacia. Retorne APENAS o texto do prompt melhorado.",
       messages: [{ role: "user", content: `Transforme o pedido simples abaixo em um prompt detalhado para gerar uma landing page premium, linda, perfeita e altamente inovadora para um escritório de advocacia.
@@ -337,8 +364,7 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
     `;
 
   if (modelType === 'claude' && claude) {
-    const response = await claude.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+    const response = await callClaude(claude, {
       max_tokens: 8192,
       system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code. No markdown.",
       messages: [{ role: "user", content: systemPrompt }]
