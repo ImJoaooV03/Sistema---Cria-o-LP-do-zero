@@ -144,6 +144,23 @@ export async function improvePrompt(prompt: string): Promise<string> {
 
 export async function generateDesignSystem(htmlContent: string): Promise<string> {
   const ai = getAI();
+  
+  // Clean up HTML to reduce token usage and prevent payload too large errors
+  let cleanedHtml = htmlContent;
+  
+  // Remove base64 images
+  cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]+"/g, 'src="[BASE64_IMAGE_REMOVED]"');
+  cleanedHtml = cleanedHtml.replace(/url\(['"]?data:image\/[^;]+;base64,[^'"]+['"]?\)/g, 'url([BASE64_IMAGE_REMOVED])');
+  
+  // Remove very large SVGs (keep the tag structure but remove complex paths if needed, or just remove them if they are huge)
+  // A simple approach is to remove SVGs that are larger than 1000 characters
+  cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, (match) => {
+    if (match.length > 2000) {
+      return '<svg>[COMPLEX_SVG_REMOVED]</svg>';
+    }
+    return match;
+  });
+
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: `
@@ -152,7 +169,7 @@ export async function generateDesignSystem(htmlContent: string): Promise<string>
 You are a *Design System Showcase Builder*.
 You are given a reference website HTML:
 
-${htmlContent}
+${cleanedHtml}
 
 Your task is to create *one new intermediate HTML file* that acts as a *living design system + pattern library* for this exact design.
 

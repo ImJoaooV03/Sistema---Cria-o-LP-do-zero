@@ -109,6 +109,27 @@ function App() {
   const [refinePrompt, setRefinePrompt] = useState("");
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   
+  // Modal State
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'alert' | 'confirm';
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'alert'
+  });
+
+  const showAlert = (title: string, message: string) => {
+    setModalConfig({ isOpen: true, title, message, type: 'alert' });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setModalConfig({ isOpen: true, title, message, type: 'confirm', onConfirm });
+  };
   // Global State
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
@@ -182,6 +203,7 @@ function App() {
       projs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       setProjects(projs);
     }, (error) => {
+      showAlert("Erro de Permissão", "Você não tem permissão para listar os projetos.");
       handleFirestoreError(error, OperationType.LIST, 'projects');
     });
 
@@ -204,6 +226,7 @@ function App() {
       dsList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       setSavedDesignSystems(dsList);
     }, (error) => {
+      showAlert("Erro de Permissão", "Você não tem permissão para listar os Design Systems.");
       handleFirestoreError(error, OperationType.LIST, 'designSystems');
     });
 
@@ -248,9 +271,18 @@ function App() {
 
     setIsLoading(true);
     setLoadingText("Gerando design inicial...");
+    
+    let generatedHtml = "";
     try {
-      const generatedHtml = await generatePage(newPrompt);
-      
+      generatedHtml = await generatePage(newPrompt);
+    } catch (error) {
+      console.error("Gemini API Error:", error);
+      showAlert("Erro", "Erro ao gerar projeto com a IA. Tente novamente.");
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
       const newProjectRef = doc(collection(db, 'projects'));
       const newProject = {
         userId: user.uid,
@@ -268,8 +300,8 @@ function App() {
       setNewClientName("");
       setNewPrompt("");
     } catch (error) {
+      showAlert("Erro de Permissão", "Você não tem permissão para criar projetos.");
       handleFirestoreError(error, OperationType.CREATE, 'projects');
-      alert("Erro ao gerar projeto. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
@@ -280,9 +312,18 @@ function App() {
 
     setIsLoading(true);
     setLoadingText("Aplicando alterações...");
+    
+    let updatedHtml = "";
     try {
-      const updatedHtml = await updatePage(activeProject.html, refinePrompt);
-      
+      updatedHtml = await updatePage(activeProject.html, refinePrompt);
+    } catch (error) {
+      console.error("Gemini API Error:", error);
+      showAlert("Erro", "Erro ao aplicar alterações com a IA. Tente novamente.");
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
       const newHistory = activeProject.history.slice(0, activeProject.historyIndex + 1);
       newHistory.push(updatedHtml);
 
@@ -295,8 +336,8 @@ function App() {
 
       setRefinePrompt("");
     } catch (error) {
+      showAlert("Erro de Permissão", "Você não tem permissão para modificar este projeto.");
       handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProject.id}`);
-      alert("Erro ao refinar design.");
     } finally {
       setIsLoading(false);
     }
@@ -340,6 +381,7 @@ function App() {
         historyIndex: newIndex
       });
     } catch (error) {
+      showAlert("Erro de Permissão", "Você não tem permissão para modificar este projeto.");
       handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProject.id}`);
     }
   };
@@ -354,13 +396,14 @@ function App() {
         historyIndex: newIndex
       });
     } catch (error) {
+      showAlert("Erro de Permissão", "Você não tem permissão para modificar este projeto.");
       handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProject.id}`);
     }
   };
 
   const deleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm("Tem certeza que deseja excluir este projeto?")) {
+    showConfirm("Excluir Projeto", "Tem certeza que deseja excluir este projeto?", async () => {
       try {
         await deleteDoc(doc(db, 'projects', id));
         if (activeProjectId === id) {
@@ -368,9 +411,10 @@ function App() {
           setCurrentView('projects');
         }
       } catch (error) {
+        showAlert("Erro de Permissão", "Você não tem permissão para excluir este projeto.");
         handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
       }
-    }
+    });
   };
 
   const downloadHtml = () => {
@@ -440,23 +484,30 @@ function App() {
     if (!input.trim() || !user) return;
     setIsLoading(true);
     setLoadingText("Extraindo Design System...");
+    let generatedHtml = "";
     try {
-      const generated = await generateDesignSystem(input);
-      setDsGeneratedHtml(generated);
-      
+      generatedHtml = await generateDesignSystem(input);
+      setDsGeneratedHtml(generatedHtml);
+      setDsViewMode('preview');
+    } catch (error) {
+      console.error("Gemini API Error:", error);
+      showAlert("Erro", "Erro ao extrair o Design System. Verifique se o arquivo não é muito grande ou tente novamente.");
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
       const newDSRef = doc(collection(db, 'designSystems'));
       const newDS = {
         userId: user.uid,
         name: dsFileName || `Design System ${savedDesignSystems.length + 1}`,
-        html: generated,
+        html: generatedHtml,
         createdAt: serverTimestamp()
       };
       await setDoc(newDSRef, newDS);
-      
-      setDsViewMode('preview');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'designSystems');
-      alert("Erro ao gerar Design System.");
+    } catch (fsError) {
+      showAlert("Erro de Permissão", "Você não tem permissão para salvar o Design System.");
+      handleFirestoreError(fsError, OperationType.CREATE, 'designSystems');
     } finally {
       setIsLoading(false);
     }
@@ -464,11 +515,14 @@ function App() {
 
   const deleteDesignSystem = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await deleteDoc(doc(db, 'designSystems', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `designSystems/${id}`);
-    }
+    showConfirm("Excluir Design System", "Tem certeza que deseja excluir este Design System?", async () => {
+      try {
+        await deleteDoc(doc(db, 'designSystems', id));
+      } catch (error) {
+        showAlert("Erro de Permissão", "Você não tem permissão para excluir este Design System.");
+        handleFirestoreError(error, OperationType.DELETE, `designSystems/${id}`);
+      }
+    });
   };
 
   const loadDesignSystem = (ds: SavedDesignSystem) => {
@@ -487,7 +541,6 @@ function App() {
     reader.onload = (event) => {
       const content = event.target?.result as string;
       setDsHtmlInput(content);
-      handleGenerateDesignSystem(content);
     };
     reader.readAsText(file);
   };
@@ -1128,11 +1181,23 @@ const renderEditor = () => (
                       <h4 className="text-lg font-medium text-white mb-2">
                         {dsFileName ? dsFileName : "Arraste ou clique para enviar"}
                       </h4>
-                      <p className="text-white/40 text-sm max-w-md">
+                      <p className="text-white/40 text-sm max-w-md mb-4">
                         {dsFileName 
-                          ? "Arquivo carregado. A extração começará automaticamente."
+                          ? "Arquivo carregado. Clique no botão abaixo para iniciar a extração."
                           : "Faça upload de um arquivo .html para extrairmos o Design System completo."}
                       </p>
+                      {dsFileName && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGenerateDesignSystem();
+                          }}
+                          disabled={isLoading}
+                          className="px-6 py-2 bg-[#d4af37] text-[#0f172a] rounded-lg text-sm font-bold hover:bg-[#b4941f] transition-all flex items-center gap-2 z-20 relative"
+                        >
+                          <Sparkles className="w-4 h-4" /> Iniciar Extração
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1263,6 +1328,37 @@ const renderEditor = () => (
   return (
     <div className="flex h-screen bg-[#050505] text-white font-sans overflow-hidden">
       
+      {/* Modal */}
+      {modalConfig.isOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f172a] border border-white/10 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">{modalConfig.title}</h3>
+            <p className="text-white/70 mb-6">{modalConfig.message}</p>
+            <div className="flex justify-end gap-3">
+              {modalConfig.type === 'confirm' && (
+                <button 
+                  onClick={() => setModalConfig({ ...modalConfig, isOpen: false })}
+                  className="px-4 py-2 text-white/70 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button 
+                onClick={() => {
+                  if (modalConfig.type === 'confirm' && modalConfig.onConfirm) {
+                    modalConfig.onConfirm();
+                  }
+                  setModalConfig({ ...modalConfig, isOpen: false });
+                }}
+                className="px-4 py-2 bg-[#d4af37] text-[#0f172a] font-bold rounded-lg hover:bg-[#b4941f] transition-colors"
+              >
+                {modalConfig.type === 'confirm' ? 'Confirmar' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Loading Overlay */}
       {isLoading && (
         <div className="absolute inset-0 z-[100] bg-[#050505]/80 backdrop-blur-sm flex flex-col items-center justify-center">
