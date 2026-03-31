@@ -145,25 +145,26 @@ export async function improvePrompt(prompt: string): Promise<string> {
 export async function generateDesignSystem(htmlContent: string): Promise<string> {
   const ai = getAI();
   
-  // Refined cleaning: Remove only the absolute "noise" to keep visual structure
+  // Extract all <link> and <style> tags to preserve external CSS (Elementor, WP, etc.)
+  const styleMatches = htmlContent.match(/<link[^>]+rel=["']stylesheet["'][^>]*>|<style[^>]*>[\s\S]*?<\/style>/gi) || [];
+  const externalStyles = styleMatches.join('\n');
+
+  // Refined cleaning: Keep visual structure but remove heavy scripts
   let cleanedHtml = htmlContent;
-  
-  // 1. Remove comments and scripts
   cleanedHtml = cleanedHtml.replace(/<!--[\s\S]*?-->/g, "");
   cleanedHtml = cleanedHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
   
-  // 2. Remove only VERY large base64 images (keep small ones/icons)
-  cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]{5000,}"/g, 'src="[LARGE_BASE64_REMOVED]"');
+  // Remove only VERY large base64 images
+  cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]{10000,}"/g, 'src="[LARGE_BASE64_REMOVED]"');
   
-  // 3. Remove only VERY large SVGs (> 10000 chars)
+  // Remove only VERY large SVGs
   cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, (match) => {
-    if (match.length > 10000) return '<svg>[LARGE_SVG_REMOVED]</svg>';
+    if (match.length > 15000) return '<svg>[LARGE_SVG_REMOVED]</svg>';
     return match;
   });
 
-  // 4. Increase limit to 120k for complex landing pages
-  if (cleanedHtml.length > 120000) {
-    cleanedHtml = cleanedHtml.substring(0, 120000) + "... [TRUNCATED]";
+  if (cleanedHtml.length > 150000) {
+    cleanedHtml = cleanedHtml.substring(0, 150000) + "... [TRUNCATED]";
   }
 
   const response = await ai.models.generateContent({
@@ -171,68 +172,70 @@ export async function generateDesignSystem(htmlContent: string): Promise<string>
     contents: `
 # World-Class Design System Architect
 
-You are a *Senior Design Engineer* at a top-tier agency. 
-You are given the source code of a high-end website:
+You are a *Senior Design Engineer*. You are given the source code of a high-end website:
 
 ${cleanedHtml}
 
-Your mission is to build a *Premium Design System Documentation* page that is **100% faithful** to the original.
+---
+
+## THE ASSETS (MANDATORY)
+You MUST include these original styles in the <head> to ensure the design isn't broken:
+${externalStyles}
 
 ---
 
-## THE GOLDEN RULES
+## THE MISSION
+Build a *Premium Design System Documentation* page that is **100% faithful** to the original.
 
-1. **PIXEL-PERFECT CLONING**: Do NOT simplify. If a component has complex gradients, specific shadows, or custom fonts, you MUST use the exact original HTML and classes.
-2. **HERO REPLICATION**: The "Hero" section of the Design System MUST be a 1:1 clone of the site's main hero section, only changing the text to "Design System v2".
-3. **STYLE INTEGRITY**: You MUST include ALL <style> blocks from the original HTML.
-4. **SHOWCASE UI**: Use the provided "Showcase CSS" below to make the documentation look like a premium product.
+## THE GOLDEN RULES
+1. **NO SIMPLIFICATION**: If the Hero section uses complex Elementor/WP structures, CLONE THEM EXACTLY. Do not replace them with simple Tailwind divs.
+2. **ASSET INTEGRITY**: Keep all original class names. The external CSS provided above depends on them.
+3. **ICON SUPPORT**: Include common icon CDNs (FontAwesome, Lucide) in the <head> just in case.
+4. **SHOWCASE UI**: Use the provided "Showcase CSS" below for the documentation wrapper.
 
 ---
 
 ## SHOWCASE UI (MANDATORY CSS)
 
-Include this in the <head> of your generated HTML:
+Include this in the <head>:
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
   :root { --ds-accent: #C4A470; --ds-bg: #f8fafc; --ds-card: #ffffff; --ds-text: #0f172a; }
   body { background: var(--ds-bg); color: var(--ds-text); font-family: 'Inter', sans-serif; margin: 0; }
-  .ds-nav { position: sticky; top: 0; z-index: 1000; background: rgba(255,255,255,0.8); backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; padding: 1rem; display: flex; justify-content: center; gap: 2rem; }
-  .ds-nav a { color: #64748b; text-decoration: none; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; transition: 0.2s; }
+  .ds-nav { position: sticky; top: 0; z-index: 9999; background: rgba(255,255,255,0.8); backdrop-filter: blur(12px); border-bottom: 1px solid #e2e8f0; padding: 1rem; display: flex; justify-content: center; gap: 2rem; }
+  .ds-nav a { color: #64748b; text-decoration: none; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; transition: 0.2s; }
   .ds-nav a:hover { color: var(--ds-accent); }
-  .ds-container { max-width: 1200px; margin: 0 auto; padding: 80px 20px; }
-  .ds-section-title { font-size: 32px; font-weight: 800; text-align: center; margin-bottom: 12px; letter-spacing: -0.02em; }
-  .ds-section-desc { text-align: center; color: #64748b; margin-bottom: 48px; font-size: 16px; }
-  .ds-divider { width: 40px; height: 3px; background: var(--ds-accent); margin: 0 auto 60px; border-radius: 2px; }
-  .ds-card { background: var(--ds-card); border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 40px; }
-  .ds-card-header { padding: 20px 32px; border-bottom: 1px solid #f1f5f9; background: #fafafa; display: flex; justify-content: space-between; align-items: center; }
-  .ds-card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
-  .ds-card-body { padding: 48px; }
-  .ds-token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; }
-  .ds-swatch { height: 100px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.05); margin-bottom: 12px; }
-  .ds-swatch-name { font-size: 14px; font-weight: 600; }
-  .ds-swatch-hex { font-family: monospace; font-size: 12px; color: #94a3b8; }
+  .ds-container { max-width: 1400px; margin: 0 auto; padding: 60px 20px; }
+  .ds-section-title { font-size: 28px; font-weight: 800; text-align: center; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .ds-section-desc { text-align: center; color: #64748b; margin-bottom: 40px; font-size: 14px; }
+  .ds-divider { width: 30px; height: 2px; background: var(--ds-accent); margin: 0 auto 50px; }
+  .ds-card { background: var(--ds-card); border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 40px; }
+  .ds-card-header { padding: 16px 24px; border-bottom: 1px solid #f1f5f9; background: #fafafa; }
+  .ds-card-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
+  .ds-card-body { padding: 0; } /* Zero padding for 1:1 components */
+  .ds-preview-box { padding: 40px; background: white; }
   section { scroll-margin-top: 80px; }
 </style>
 
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 ---
 
-## OBJECTIVE
+## OUTPUT STRUCTURE
 
-Build a single-page Pattern Library with these sections:
+Build a single-page with:
+1. **Hero Preview**: A 1:1 clone of the original site's hero.
+2. **Typography**: Table showing Heading levels using original classes.
+3. **Colors**: Swatches from CSS variables.
+4. **Components**: Buttons and Cards in their original state.
 
-1. **Hero**: 1:1 Clone of original hero (text adapted).
-2. **Typography**: A clean table showing all Heading levels and Body styles using original classes.
-3. **Color Palette**: Swatches of all colors found in the CSS variables.
-4. **UI Components**: Buttons, Cards, and Icons shown in their original state.
-5. **Motion**: A gallery showing elements with the original entrance animations.
-
-Return ONLY the raw HTML code. No markdown, no backticks.
+Return ONLY the raw HTML code.
     `,
   });
 
   let html = response.text || "";
-  // Robust markdown cleaning
   html = html.replace(/```html/gi, '').replace(/```/g, '').trim();
   return html;
 }
