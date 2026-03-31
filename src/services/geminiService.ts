@@ -152,8 +152,7 @@ export async function generateDesignSystem(htmlContent: string): Promise<string>
   cleanedHtml = cleanedHtml.replace(/src="data:image\/[^;]+;base64,[^"]+"/g, 'src="[BASE64_IMAGE_REMOVED]"');
   cleanedHtml = cleanedHtml.replace(/url\(['"]?data:image\/[^;]+;base64,[^'"]+['"]?\)/g, 'url([BASE64_IMAGE_REMOVED])');
   
-  // Remove very large SVGs (keep the tag structure but remove complex paths if needed, or just remove them if they are huge)
-  // A simple approach is to remove SVGs that are larger than 1000 characters
+  // Remove very large SVGs
   cleanedHtml = cleanedHtml.replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, (match) => {
     if (match.length > 2000) {
       return '<svg>[COMPLEX_SVG_REMOVED]</svg>';
@@ -177,9 +176,8 @@ Your task is to create *one new intermediate HTML file* that acts as a *living d
 
 ## GOAL
 
-Generate *one single file* called: design-system.html and place it in the same folder of the html file.
-
-This file must preserve the *exact look & behavior* of the reference design by *reusing the original HTML, CSS classes, animations, keyframes, transitions,effects, and layout patterns* — not approximations.
+Generate *one single file* called: design-system.html.
+This file must preserve the *exact look & behavior* of the reference design by *reusing the original HTML, CSS classes, animations, and layout patterns*.
 
 ---
 
@@ -187,9 +185,10 @@ This file must preserve the *exact look & behavior* of the reference design by *
 
 1. Do *not redesign* or invent new styles.
 2. Reuse *exact class names, animations, timing, easing, hover/focus states*.
-3. Reference the *same CSS/JS assets* used by the original, BUT:
-4. CRITICAL: Replace any local asset paths (like \`assets/...\`) with public CDNs (e.g., Tailwind CSS \`<script src="https://cdn.tailwindcss.com"></script>\`, Iconify \`<script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>\`). Ensure Tailwind CDN is included if Tailwind classes are used. ALWAYS keep all custom \`<style>\` blocks from the original HTML.
-5. If a style/component is not used in the reference HTML, *do not add it*.
+3. **CRITICAL: You MUST include the Tailwind CSS CDN script in the <head>:**
+   <script src="https://cdn.tailwindcss.com"></script>
+4. **CRITICAL: You MUST include all <style> blocks found in the original HTML.**
+5. Reference the *same CSS/JS assets* used by the original, but replace local paths with public CDNs if applicable.
 6. The file must be *self-explanatory by structure* (sections = documentation).
 7. Include a *top horizontal nav* with anchor links to each section.
 
@@ -203,144 +202,46 @@ Build a *single page* composed of *canonical examples* of the design system, org
 
 ## SHOWCASE STYLES (REQUIRED)
 
-You MUST include the following CSS in the \`<head>\` of your generated HTML to style the showcase itself. You MUST use these classes (\`ds-row\`, \`swatch-inner\`, etc.) to build the showcase sections.
+You MUST include the following CSS in the <head> of your generated HTML to style the showcase itself.
 
-\`\`\`css
 <style>
 /* DS2 extras */
-.ds-label { font-family:'Inter',sans-serif; font-size:10px; letter-spacing:.18em; text-transform:uppercase; font-weight:600; color:#888; }
-.ds-token { font-family:monospace; font-size:11px; color:#999; }
-.ds-row { display:flex; align-items:center; gap:16px; padding:28px 32px; background:#fff; border-bottom:1px solid #e5e7eb; }
-.ds-row:hover { background:#f9fafb; }
+body { background: #f8fafc; color: #1e293b; }
+.ds-label { font-family:'Inter',sans-serif; font-size:10px; letter-spacing:.18em; text-transform:uppercase; font-weight:600; color:#64748b; }
+.ds-token { font-family:monospace; font-size:11px; color:#94a3b8; }
+.ds-row { display:flex; align-items:center; gap:16px; padding:28px 32px; background:#fff; border-bottom:1px solid #e2e8f0; }
+.ds-row:hover { background:#f1f5f9; }
 .ds-row-name { width:160px; flex-shrink:0; }
 .ds-row-preview { flex:1; }
-.ds-row-spec { min-width:180px; text-align:right; font-family:monospace; font-size:11px; color:#9ca3af; }
-.motion-card { border:1px solid rgba(255,255,255,.1); padding:32px; border-radius:2px; text-align:center; cursor:pointer; transition:border-color .3s; }
-.motion-card:hover { border-color:#C4A470; }
-.swatch-inner { height:96px; width:100%; border-radius:2px; }
-.swatch-label { margin-top:10px; }
-.swatch-name { display:block; font-size:13px; font-weight:500; color:#050615; }
-.swatch-token { display:block; font-size:11px; color:#6b7280; font-family:monospace; }
-.icon-cell { display:flex; flex-direction:column; align-items:center; gap:8px; padding:20px; color:#6b7280; transition:color .2s; }
-.icon-cell:hover { color:#C4A470; }
-.icon-cell span { font-size:10px; font-family:monospace; }
-.layout-demo { background:#e5e7eb; padding:12px; border:2px dashed #9ca3af; font-size:12px; font-family:monospace; color:#555; }
-.layout-col { background:rgba(0,0,0,.08); padding:24px; display:flex; align-items:center; justify-content:center; }
-.ds-section-header { text-align:center; margin-bottom:64px; }
-.ds-divider { width:64px; height:1px; background:#C4A470; margin: 16px auto; }
+.ds-row-spec { min-width:180px; text-align:right; font-family:monospace; font-size:11px; color:#94a3b8; }
+.swatch-inner { height:96px; width:100%; border-radius:4px; border: 1px solid rgba(0,0,0,0.05); }
+.ds-section-header { text-align:center; margin-bottom:64px; padding-top: 64px; }
+.ds-divider { width:64px; height:2px; background:#C4A470; margin: 16px auto; }
+nav.ds-nav { position: sticky; top: 0; z-index: 100; background: white; border-bottom: 1px solid #e2e8f0; padding: 1rem; display: flex; justify-content: center; gap: 2rem; font-weight: 500; font-size: 14px; }
+nav.ds-nav a { color: #64748b; transition: color 0.2s; }
+nav.ds-nav a:hover { color: #C4A470; }
 </style>
-\`\`\`
 
 ---
 
 ### 0) Hero (Exact Clone, Text Adapted)
-
-The *first section MUST be a direct clone of the original Hero*:
-
-•  Same HTML structure
-•  Same class names
-•  Same layout
-•  Same images and components
-•  Same animations and interactions
-•  Same buttons and background
-•  Same UI components (if any)
-
-*Allowed change (only this):*
-
-•  Replace the hero text content to present the *Design System*
-•  Keep similar text length and hierarchy
-
-*Forbidden:*
-
-•  Do not change layout, spacing, alignment, or animations
-•  Do not add or remove elements
-
----
+The first section MUST be a direct clone of the original Hero, but adapted to say "Design System".
 
 ### 1) Typography
-
-Create a *Typography section* rendered as a *spec table / vertical list*.
-
-Each row MUST contain:
-
-•  Style name (e.g. "Heading 1", "Bold M")
-•  Live text preview using the *exact original HTML element and CSS classes*
-•  Font size / line-height label aligned right (format: 40px / 48px)
-
-Include ONLY styles that exist in the reference HTML, in this order:
-
-•  Heading 1
-•  Heading 2
-•  Heading 3
-•  Heading 4
-•  Bold L / Bold M / Bold S
-•  Paragraph (larger body, if exists)
-•  Regular L / Regular M / Regular S
-
-Rules:
-
-•  No inline styles
-•  No normalization
-•  Typography, colors, spacing, and gradients MUST come from original CSS
-•  If a style uses gradient text, show it exactly the same
-•  If a style does not exist, do NOT include it
-
-This section must communicate *hierarchy, scale, and rhythm* at a glance.
-
----
+Create a spec table showing H1, H2, H3, Paragraphs using original classes.
 
 ### 2) Colors & Surfaces
-
-•  Backgrounds (page, section, card, glass/blur if exists)
-•  Borders, dividers, overlays
-•  Gradients (as swatches + usage context)
-
----
+Show swatches of the main colors used in the design.
 
 ### 3) UI Components
+Buttons, cards, and other interactive elements.
 
-•  Buttons, inputs, cards, etc. (only those that exist)
-•  Show states side-by-side: default / hover / active / focus / disabled
-•  Inputs only if present (default/focus/error if applicable)
-
----
-
-### 4) Layout & Spacing
-
-•  Containers, grids, columns, section paddings
-•  Show 2–3 real layout patterns from the reference (hero layout, grid, split)
-
----
-
-### 5) Motion & Interaction
-
-Show all motion behaviors present:
-
-•  Entrance animations (if any)
-•  Hover lifts/glows
-•  Button hover transitions
-•  Scroll/reveal behavior (only if present)
-
-Include a small *Motion Gallery* demonstrating each animation class.
-
----
-
-### 6) Icons
-
-If the reference uses icons:
-
-•  Display the *same icon style/system*
-•  Show size variants and color inheritance
-•  Use the *same markup and classes*
-
-If icons are not present, omit this section entirely.
-
-Return ONLY the raw HTML code for the design system page. Do not include markdown formatting like \`\`\`html or \`\`\`.
+Return ONLY the raw HTML code. Do not include any markdown formatting or backticks.
     `,
   });
 
   let html = response.text || "";
-  // Clean up markdown if present
-  html = html.replace(/^```html\n/, '').replace(/\n```$/, '');
+  // Robust markdown cleaning
+  html = html.replace(/```html/gi, '').replace(/```/g, '').trim();
   return html;
 }
