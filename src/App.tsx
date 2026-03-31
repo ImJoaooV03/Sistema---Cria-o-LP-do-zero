@@ -147,7 +147,6 @@ function App() {
   const [isClaudeActive, setIsClaudeActive] = useState(false);
   const [dsModel, setDsModel] = useState<'claude' | 'gemini'>('claude');
   const [mainModel, setMainModel] = useState<'claude' | 'gemini'>('claude');
-  const dsIframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const claudeKey = import.meta.env.VITE_CLAUDE_API_KEY;
@@ -586,16 +585,7 @@ function App() {
   };
 
   // Update design system iframe
-  useEffect(() => {
-    if (dsIframeRef.current && dsGeneratedHtml && dsViewMode === 'preview' && currentView === 'design-system') {
-      const doc = dsIframeRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(dsGeneratedHtml);
-        doc.close();
-      }
-    }
-  }, [dsGeneratedHtml, dsViewMode, currentView]);
+  // Removed manual doc.write useEffect in favor of srcDoc for better reliability
 
   // Update iframe when active project HTML changes
   useEffect(() => {
@@ -1406,7 +1396,8 @@ const renderEditor = () => (
             </div>
           ) : dsViewMode === 'preview' ? (
             <iframe 
-              ref={dsIframeRef}
+              key={dsGeneratedHtml ? 'ds-preview-active' : 'ds-preview-empty'}
+              srcDoc={dsGeneratedHtml || '<!DOCTYPE html><html><body style="background: #050505; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif;">Aguardando geração...</body></html>'}
               className="w-full h-full border-none bg-white"
               title="Design System Preview"
               sandbox="allow-scripts allow-same-origin"

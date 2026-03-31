@@ -379,8 +379,17 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
     const content = response.content[0];
     if (content.type === 'text') {
       let html = content.text;
-      html = html.replace(/```html/gi, '').replace(/```/g, '').trim();
-      return html;
+      
+      // Extract content between ```html and ``` if present
+      const match = html.match(/```html([\s\S]*?)```/i) || html.match(/```([\s\S]*?)```/i);
+      if (match) {
+        html = match[1];
+      } else {
+        // Fallback: remove markdown markers if they exist
+        html = html.replace(/```html/gi, '').replace(/```/g, '');
+      }
+      
+      return html.trim();
     }
     return "";
   }
@@ -390,11 +399,21 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
     contents: systemPrompt,
     config: {
       systemInstruction: "You are a World-Class Design System Architect and CSS Expert. Your task is to build a Premium Design System Documentation page that is 100% faithful to the provided HTML. You MUST replicate the original design exactly, including all complex structures and external assets. Return ONLY the raw HTML code. NO MARKDOWN.",
-      temperature: 0.1, // Even lower for maximum fidelity
+      temperature: 0.1,
+      maxOutputTokens: 8192,
     }
   });
 
   let html = response.text || "";
-  html = html.replace(/```html/gi, '').replace(/```/g, '').trim();
-  return html;
+  
+  // Extract content between ```html and ``` if present
+  const match = html.match(/```html([\s\S]*?)```/i) || html.match(/```([\s\S]*?)```/i);
+  if (match) {
+    html = match[1];
+  } else {
+    // Fallback: remove markdown markers if they exist
+    html = html.replace(/```html/gi, '').replace(/```/g, '');
+  }
+  
+  return html.trim();
 }
