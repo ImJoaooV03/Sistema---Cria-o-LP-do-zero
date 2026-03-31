@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 import { GoogleGenAI, Type } from "@google/genai";
-import Anthropic from "@anthropic-ai/sdk";
 
 export interface GeneratedPage {
   title: string;
@@ -22,86 +21,8 @@ function getAI() {
   return new GoogleGenAI({ apiKey: apiKey! });
 }
 
-function getClaudeAI() {
-  const apiKey = 
-    (typeof process !== 'undefined' ? process.env.CLAUDE_API_KEY : undefined) || 
-    import.meta.env.VITE_CLAUDE_API_KEY;
-    
-  if (!apiKey) {
-    return null;
-  }
-  
-  return new Anthropic({
-    apiKey: apiKey,
-    dangerouslyAllowBrowser: true, // Required for client-side usage in this environment
-    defaultHeaders: {
-      'anthropic-version': '2023-06-01'
-    }
-  });
-}
-
-async function callClaude(claude: Anthropic, params: any) {
-  // Model priority list based on user documentation and standard availability
-  const models = [
-    "claude-3-7-sonnet-20250219", // Latest and greatest
-    "claude-3-5-sonnet-20241022", 
-    "claude-3-5-sonnet-20240620", 
-    "claude-3-5-haiku-20241022",
-    "claude-3-opus-20240229",
-    "claude-3-sonnet-20240229",
-    "claude-3-haiku-20240307"
-  ];
-  let lastError = null;
-
-  for (const model of models) {
-    try {
-      return await claude.messages.create({
-        ...params,
-        model: model
-      });
-    } catch (error: any) {
-      lastError = error;
-      // If it's a 404 (model not found) or 400 (bad request/token limit), try the next one in the list
-      if (error.status === 404 || error.status === 400 || (error.message && (error.message.includes('not_found_error') || error.message.includes('token_limit')))) {
-        console.warn(`Model ${model} failed with ${error.status || 'error'}, trying fallback...`);
-        continue;
-      }
-      // For other errors (auth, rate limit, etc.), throw immediately
-      throw error;
-    }
-  }
-  throw lastError;
-}
-
-export async function generatePage(prompt: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
-  const claude = getClaudeAI();
+export async function generatePage(prompt: string): Promise<string> {
   const ai = getAI();
-
-  if (modelType === 'claude' && claude) {
-    const response = await callClaude(claude, {
-      max_tokens: 8192,
-      system: "Você é um web designer e desenvolvedor frontend de elite, visionário e inovador, especialista em páginas para escritórios de advocacia (Law Firms) no mercado brasileiro. Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA. Use APENAS Tailwind CSS via CDN. Retorne APENAS o conteúdo HTML para o <body>. Sem tags <html>/<body>/<head>.",
-      messages: [{ role: "user", content: `Crie uma landing page de altíssima conversão, linda, perfeita e ÚNICA para: "${prompt}".
-      
-      DIRETRIZES CRÍTICAS DE DESIGN (Estética Premium + Inovação):
-      1. FUNDAÇÃO: Mantenha a essência Dark & Gold (fundos escuros como bg-navy-900 ou bg-slate-950, acentos em dourado text-gold-500).
-      2. INOVAÇÃO E CRIATIVIDADE: Use a estrutura clássica de advocacia como referência, mas INVENTE. Crie layouts assimétricos, elementos sobrepostos, grids criativos (como bento grids), glassmorphism avançado (bg-white/5 backdrop-blur-xl), e tipografia artística. Faça a página parecer uma obra de arte premiada (nível Awwwards), diferente do padrão engessado.
-      3. TIPOGRAFIA: Use 'Playfair Display' (font-serif) para títulos gigantes e impactantes. Brinque com tamanhos (text-6xl a text-8xl), itálicos e pesos para criar hierarquia visual. Use 'Inter' (font-sans) para textos.
-      4. HERO SECTION E CONVERSÃO: Crie um Hero section deslumbrante dividido (split layout). Lado ESQUERDO: Título de impacto, copy persuasiva e botões de CTA magnéticos (ex: 'Fale com um Especialista'). Lado DIREITO: Uma imagem imponente e profissional de um advogado ou do escritório (use a tag img com máscaras, bordas arredondadas ou recortes criativos). NÃO coloque formulário no hero, foque em botões que direcionam para o WhatsApp ou para uma seção de contato inferior. INCLUA SEMPRE um botão flutuante de WhatsApp no canto inferior direito. Faixas de "Trust" (Prova Social) abaixo do hero.
-      5. IMAGENS: Use 'https://picsum.photos/seed/{keyword}/1280/720' integradas de forma criativa (masks modernas, recortes, filtros grayscale elegantes que revelam a cor no hover).
-      
-      REQUISITOS TÉCNICOS:
-      - Use APENAS Tailwind CSS via CDN. As cores personalizadas 'navy-900', 'navy-800', 'gold-500', 'gold-600' já estão configuradas no ambiente.
-      - Inclua ícones usando a tag <i data-lucide="nome-do-icone"></i> (ex: <i data-lucide="scale"></i>).
-      - Retorne APENAS o conteúdo HTML para o <body>. Sem tags <html>/<body>/<head>.
-      - O texto deve ser em Português do Brasil (PT-BR) com copy persuasiva, focada em segurança, confiança e autoridade.
-      
-      Formato de saída: Apenas a string HTML.` }]
-    });
-    const content = response.content[0];
-    if (content.type === 'text') return content.text;
-    return "";
-  }
 
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
@@ -129,30 +50,8 @@ export async function generatePage(prompt: string, modelType: 'claude' | 'gemini
   return response.text || "";
 }
 
-export async function updatePage(currentHtml: string, instruction: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
-  const claude = getClaudeAI();
+export async function updatePage(currentHtml: string, instruction: string): Promise<string> {
   const ai = getAI();
-
-  if (modelType === 'claude' && claude) {
-    const response = await callClaude(claude, {
-      max_tokens: 8192,
-      system: "Você é um web designer de elite, visionário e inovador, focado no mercado de advocacia. Retorne APENAS o conteúdo HTML atualizado.",
-      messages: [{ role: "user", content: `Aqui está o HTML atual:
-      
-      \`\`\`html
-      ${currentHtml}
-      \`\`\`
-      
-      Refine esta página com base em: "${instruction}". 
-      
-      Mantenha a base da estética premium de advocacia (Dark & Gold, tipografia Serif), mas sinta-se livre para INOVAR e criar soluções visuais únicas, modernas e deslumbrantes. Faça o design se destacar como perfeito, diferente do padrão engessado, usando layouts criativos, sobreposições e glassmorphism. O texto deve ser persuasivo em PT-BR.
-      
-      Retorne APENAS o conteúdo HTML atualizado.` }]
-    });
-    const content = response.content[0];
-    if (content.type === 'text') return content.text;
-    return "";
-  }
 
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
@@ -220,32 +119,8 @@ export async function generateImage(prompt: string): Promise<string> {
   throw new Error("No image generated");
 }
 
-export async function improvePrompt(prompt: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
-  const claude = getClaudeAI();
+export async function improvePrompt(prompt: string): Promise<string> {
   const ai = getAI();
-
-  if (modelType === 'claude' && claude) {
-    const response = await callClaude(claude, {
-      max_tokens: 4096,
-      system: "Você é um especialista em engenharia de prompt e web design visionário, focado no mercado de advocacia. Retorne APENAS o texto do prompt melhorado.",
-      messages: [{ role: "user", content: `Transforme o pedido simples abaixo em um prompt detalhado para gerar uma landing page premium, linda, perfeita e altamente inovadora para um escritório de advocacia.
-      
-      Pedido original: "${prompt}"
-      
-      O prompt melhorado deve enfatizar:
-      - Estética Dark & Gold como fundação, mas com liberdade criativa para inovar (layouts assimétricos, bento grids, sobreposições elegantes).
-      - Design de vanguarda, perfeito e deslumbrante (nível Awwwards), fugindo do padrão engessado.
-      - Tipografia Serif elegante e artística para títulos gigantes (Playfair Display).
-      - Hero section dividido: Texto persuasivo e CTAs à esquerda, e uma imagem imponente de advogado/escritório à direita (sem formulário no hero).
-      - Elementos de conversão (WhatsApp flutuante, Trust badges).
-      - Copywriting persuasivo em Português do Brasil (PT-BR) focado em segurança e sigilo.
-      
-      Retorne APENAS o texto do prompt melhorado.` }]
-    });
-    const content = response.content[0];
-    if (content.type === 'text') return content.text;
-    return prompt;
-  }
 
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
@@ -270,8 +145,7 @@ export async function improvePrompt(prompt: string, modelType: 'claude' | 'gemin
   return response.text || prompt;
 }
 
-export async function generateDesignSystem(htmlContent: string, modelType: 'claude' | 'gemini' = 'claude'): Promise<string> {
-  const claude = getClaudeAI();
+export async function generateDesignSystem(htmlContent: string): Promise<string> {
   const ai = getAI();
   
   // Extract all <link> and <style> tags to preserve external CSS (Elementor, WP, etc.)
@@ -369,61 +243,11 @@ Build a single-page with:
 Return ONLY the raw HTML code. Do not include markdown blocks or any text outside the <html> tags.
     `;
 
-  if (modelType === 'claude' && claude) {
-    const response = await callClaude(claude, {
-      max_tokens: 8192,
-      system: "You are a World-Class Design System Architect. Build a Premium Design System Documentation page that is 100% faithful to the original. Return ONLY the raw HTML code. No markdown. Ensure the output starts with <!DOCTYPE html> or <html>.",
-      messages: [{ role: "user", content: systemPrompt }]
-    });
-    
-    // Concatenate all text blocks (skipping thinking blocks)
-    let fullText = response.content
-      .filter((c: any) => c.type === 'text')
-      .map((c: any) => c.text)
-      .join('\n');
-    
-    if (fullText.trim()) {
-      let html = fullText;
-      
-      // 1. Try to extract from markdown blocks
-      const match = html.match(/```html([\s\S]*?)```/i) || html.match(/```([\s\S]*?)```/i);
-      if (match) {
-        html = match[1];
-      } else {
-        // 2. Try to find content between <html> or <!DOCTYPE and the end
-        const htmlStart = html.search(/<!DOCTYPE|<html>/i);
-        if (htmlStart !== -1) {
-          html = html.substring(htmlStart);
-          const htmlEnd = html.lastIndexOf('</html>');
-          if (htmlEnd !== -1) {
-            html = html.substring(0, htmlEnd + 7);
-          }
-        } else {
-          // Fallback: remove markdown markers if they exist
-          html = html.replace(/```html/gi, '').replace(/```/g, '');
-        }
-      }
-      
-      const resultHtml = html.trim();
-      if (resultHtml.length > 100) {
-        // Ensure it's a full HTML document
-        if (!resultHtml.toLowerCase().includes('<html')) {
-          return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${resultHtml}</body></html>`;
-        }
-        return resultHtml;
-      }
-    }
-    
-    // If Claude failed or returned empty, fallback to Gemini
-    console.warn("Claude returned empty or invalid HTML, falling back to Gemini...");
-    console.log("Claude raw response was:", fullText.substring(0, 500) + "...");
-  }
-
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: systemPrompt,
     config: {
-      systemInstruction: "You are a World-Class Design System Architect and CSS Expert. Your task is to build a Premium Design System Documentation page that is 100% faithful to the provided HTML. You MUST replicate the original design exactly, including all complex structures and external assets. Return ONLY the raw HTML code. NO MARKDOWN.",
+      systemInstruction: "You are a World-Class Design System Architect and CSS Expert. Your task is to build a Premium Design System Documentation page that is 100% faithful to the provided HTML. You MUST replicate the original design exactly, including all complex structures and external assets. Return ONLY the raw HTML code. NO MARKDOWN. Ensure the output is a complete HTML document starting with <!DOCTYPE html> or <html>.",
       temperature: 0.1,
       maxOutputTokens: 8192,
     }
@@ -450,10 +274,36 @@ Return ONLY the raw HTML code. Do not include markdown blocks or any text outsid
     }
   }
   
-  const finalHtml = html.trim();
+  let finalHtml = html.trim();
+  
+  // If the output is still empty or too short, return a fallback error page
+  if (!finalHtml || finalHtml.length < 200) {
+    console.error("Gemini returned empty or too short content for Design System.");
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Erro na Geração</title>
+    <style>
+        body { background: #050505; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; text-align: center; padding: 20px; }
+        .error-card { background: #0A0A0A; border: 1px solid #d4af37/30; padding: 40px; rounded-2xl: 16px; max-width: 500px; }
+        h1 { color: #d4af37; margin-bottom: 20px; }
+        p { color: rgba(255,255,255,0.6); line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="error-card">
+        <h1>Falha na Geração</h1>
+        <p>A inteligência artificial não conseguiu extrair o Design System deste arquivo. Isso pode ocorrer se o arquivo for muito complexo ou se houver um erro temporário na API.</p>
+        <p>Por favor, tente novamente ou use um arquivo HTML diferente.</p>
+    </div>
+</body>
+</html>`;
+  }
+  
   // Ensure it's a full HTML document
-  if (finalHtml.length > 100 && !finalHtml.toLowerCase().includes('<html')) {
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${finalHtml}</body></html>`;
+  if (!finalHtml.toLowerCase().includes('<html')) {
+    finalHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${finalHtml}</body></html>`;
   }
   
   return finalHtml;
