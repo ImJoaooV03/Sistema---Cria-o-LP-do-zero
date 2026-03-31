@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { GoogleGenAI, Type } from "@google/genai";
 
 export interface GeneratedPage {
@@ -8,7 +9,15 @@ export interface GeneratedPage {
 
 function getAI() {
   // Use the selected API key if available, otherwise fallback to the default one
-  const apiKey = (window as any).process?.env?.API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = 
+    (window as any).process?.env?.API_KEY || 
+    (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined) || 
+    import.meta.env.VITE_GEMINI_API_KEY;
+    
+  if (!apiKey) {
+    console.error("API Key do Gemini não encontrada. Verifique as variáveis de ambiente (VITE_GEMINI_API_KEY).");
+  }
+  
   return new GoogleGenAI({ apiKey: apiKey! });
 }
 

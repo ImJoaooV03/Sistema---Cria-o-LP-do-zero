@@ -215,18 +215,18 @@ function App() {
 
   const activeProject = projects.find(p => p.id === activeProjectId);
 
-  // Mock Chart Data
+  // Real Chart Data
   const chartData = useMemo(() => {
     const today = new Date();
     return Array.from({ length: 7 }).map((_, i) => {
       const d = new Date(today);
       d.setDate(d.getDate() - (6 - i));
       const dayName = d.toLocaleDateString('pt-BR', { weekday: 'short' });
-      // Base mock data + actual projects created on that day
+      // Actual projects created on that day
       const actualCount = projects.filter(p => p.createdAt.toDateString() === d.toDateString()).length;
       return {
         name: dayName,
-        paginas: Math.floor(Math.random() * 5) + 1 + actualCount, // Mock + actual
+        paginas: actualCount,
       };
     });
   }, [projects]);
